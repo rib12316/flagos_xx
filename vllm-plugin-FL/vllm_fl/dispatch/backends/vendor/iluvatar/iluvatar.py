@@ -235,6 +235,25 @@ def patch_sampler_compile_for_iluvatar() -> None:
 patch_sampler_compile_for_iluvatar()
 
 
+def install_attn_launch_config_for_iluvatar() -> None:
+    """Install the data-driven launch-config table for vllm's unified attention
+    kernel.
+
+    BI-V150 tune: per-shape (path x bs-tier x kv-tier) num_warps/num_stages
+    table, default-on, regenerable by scripts/sweep_attn_launch.py. Kernel
+    math and constexprs untouched (bit-exact; see attn_launch_config
+    docstring for measurements and the two-hop integration rationale).
+    Env switches: VLLM_FL_ATTN_LAUNCH=0 disables (upstream defaults);
+    VLLM_FL_ATTN_LAUNCH_TABLE=<json> swaps in a swept table.
+    """
+    from .attn_launch_config import install as _install_attn_launch_config
+
+    _install_attn_launch_config()
+
+
+install_attn_launch_config_for_iluvatar()
+
+
 def patch_torch_inductor_for_iluvatar() -> None:
     """Patch torch._inductor GPUTarget to use the correct triton backend name.
 

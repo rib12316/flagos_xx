@@ -1,0 +1,63 @@
+INFO 11-03 22:57:08 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-03 22:57:08 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-03 22:57:08 [__init__.py:49] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+/usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:728: DeprecationWarning: use_cuda_graph is deprecated; use benchmark_mode='replay' or benchmark_mode='event'
+  super().__init__(*args, **kwargs)
+/usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
+  resolved_benchmark = resolve_benchmarker(
+INFO 11-03 22:57:18 [__init__.py:237] Platform plugin fl is activated
+环境: torch=2.10.0 cuda_dev=Iluvatar BI-V150
+triton=3.6.0
+形状: 16Q/2KV 头 × head_dim 128, bf16, block=16, seg=16
+自校准: D2D copy 带宽（读+写）= 587.5 GB/s
+
+== decode 3D 路径 (bs=64, kv=4096) KV读=0.268 GB ==
+  decode kv=  4096 arm=default     1703.8 µs   157.6 GB/s
+  decode kv=  4096 arm=w1s1         959.0 µs   279.9 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  decode kv=  4096 arm=w2s1        1004.9 µs   267.1 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  bit-exact[w1s1 vs default]: max_abs_diff=0.0
+  bit-exact[w2s1 vs default]: max_abs_diff=0.0
+RESULT|bench=decode|kv=4096|arm=w1s1|default_us=1703.8|tuned_us=959.0|speedup=1.777x|bw_gain_pct=77.7|GBps_default=157.6|GBps_tuned=279.9
+RESULT|bench=decode|kv=4096|arm=w2s1|default_us=1703.8|tuned_us=1004.9|speedup=1.695x|bw_gain_pct=69.5|GBps_default=157.6|GBps_tuned=267.1
+
+== decode 3D 路径 (bs=64, kv=16384) KV读=1.074 GB ==
+  decode kv= 16384 arm=default     6240.4 µs   172.1 GB/s
+  decode kv= 16384 arm=w1s1        3374.3 µs   318.2 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  decode kv= 16384 arm=w2s1        3676.2 µs   292.1 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  bit-exact[w1s1 vs default]: max_abs_diff=0.0
+  bit-exact[w2s1 vs default]: max_abs_diff=0.0
+RESULT|bench=decode|kv=16384|arm=w1s1|default_us=6240.4|tuned_us=3374.3|speedup=1.849x|bw_gain_pct=84.9|GBps_default=172.1|GBps_tuned=318.2
+RESULT|bench=decode|kv=16384|arm=w2s1|default_us=6240.4|tuned_us=3676.2|speedup=1.698x|bw_gain_pct=69.8|GBps_default=172.1|GBps_tuned=292.1
+
+== prefill 2D 路径 (8seq×1024q, kv=4096) 名义KV读=34.360 GB ==
+  prefill kv=  4096 arm=default    69995.8 µs   490.9 GB/s
+  prefill kv=  4096 arm=w1s1       58835.2 µs   584.0 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  prefill kv=  4096 arm=w2s1       46754.7 µs   734.9 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  bit-exact[w1s1 vs default]: max_abs_diff=0.0
+  bit-exact[w2s1 vs default]: max_abs_diff=0.0
+RESULT|bench=prefill|kv=4096|arm=w1s1|default_us=69995.8|tuned_us=58835.2|speedup=1.190x|bw_gain_pct=19.0|GBps_default=490.9|GBps_tuned=584.0
+RESULT|bench=prefill|kv=4096|arm=w2s1|default_us=69995.8|tuned_us=46754.7|speedup=1.497x|bw_gain_pct=49.7|GBps_default=490.9|GBps_tuned=734.9
+
+== prefill 2D 路径 (8seq×1024q, kv=16384) 名义KV读=137.439 GB ==
+  prefill kv= 16384 arm=default   307562.5 µs   446.9 GB/s
+  prefill kv= 16384 arm=w1s1      259834.7 µs   528.9 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  prefill kv= 16384 arm=w2s1      204825.1 µs   671.0 GB/s
+[bench] 检测到已安装的旧 launch patch，已还原为上游 kernel（default 臂不受污染）
+  bit-exact[w1s1 vs default]: max_abs_diff=0.0
+  bit-exact[w2s1 vs default]: max_abs_diff=0.0
+RESULT|bench=prefill|kv=16384|arm=w1s1|default_us=307562.5|tuned_us=259834.7|speedup=1.184x|bw_gain_pct=18.4|GBps_default=446.9|GBps_tuned=528.9
+RESULT|bench=prefill|kv=16384|arm=w2s1|default_us=307562.5|tuned_us=204825.1|speedup=1.502x|bw_gain_pct=50.2|GBps_default=446.9|GBps_tuned=671.0
+
+== 判据核对（调优臂在其路径带宽增益 ≥10%）==
+VERDICT|path=decode|kv=4096|arm=w1s1|bw_gain_pct=77.7|PASS
+VERDICT|path=decode|kv=16384|arm=w1s1|bw_gain_pct=84.9|PASS
+VERDICT|path=prefill|kv=4096|arm=w2s1|bw_gain_pct=49.7|PASS
+VERDICT|path=prefill|kv=16384|arm=w2s1|bw_gain_pct=50.2|PASS
+OVERALL|REPRODUCED
