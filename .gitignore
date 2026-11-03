@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Logs & transient outputs（CSV 结果在 results/ 显式 add）
+*.log
+logs/
+/tmp/
+nohup.out
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# profile traces（chrome trace 太大，存档走 results/ 压缩包）
+*.trace.json
+*.chrome.trace
