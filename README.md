@@ -32,6 +32,10 @@ cd flagos_xx/vllm-plugin-FL && pip install --no-build-isolation .   # 或 --no-d
 
 **pip provenance 纪律**（F5 教训，每次测量前执行）：`pip show vllm-fl | grep -i location` + `direct_url.json` 指向本仓库路径；diff `site-packages` 与本仓库源码一致；确认旧仓库 patch 符号不存在；`flag_gems` 版本 == v5.3.5。
 
+## 开发模式（2026-11-03 起）
+
+**单 agent 串行开发**：一个开发 agent 按 **`docs/开发总路线.md`**（唯一权威总纲）顺序执行，日常循环与纪律见该文 §3-§4；执行状态记录在 `开发记录.md`。三线研究文档（`docs/track-*.md`）为参考资料。
+
 ## 目录结构
 
 ```

@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlagOS 赛道二开发路线图 · v2（天数主线）</title>
+<style>
+  :root {
+    --background: #f6f7f9; --foreground: #1c1c21;
+    --card: #ffffff; --card-foreground: #1c1c21;
+    --muted: #ececf0; --muted-foreground: #6b6b76;
+    --primary: #1c1c21; --primary-foreground: #fafafa;
+    --accent: #e8e8ee; --accent-foreground: #1c1c21;
+    --destructive: #d5484f;
+    --border: #e2e2e8; --popover: #ffffff; --popover-foreground: #1c1c21;
+    --viz-series-1: #3572d3; --viz-series-2: #7c5cd6; --viz-series-3: #2e9e6b;
+    --viz-series-4: #d98a1f; --viz-series-5: #c94f7c; --viz-series-6: #2b9bb5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #17171c; --foreground: #ececf1;
+      --card: #1f1f26; --card-foreground: #ececf1;
+      --muted: #2a2a33; --muted-foreground: #9a9aa6;
+      --primary: #ececf1; --primary-foreground: #17171c;
+      --accent: #2a2a33; --accent-foreground: #ececf1;
+      --destructive: #f0777e;
+      --border: #32323c; --popover: #26262e; --popover-foreground: #ececf1;
+      --viz-series-1: #6c9ef2; --viz-series-2: #a68ef0; --viz-series-3: #5fc494;
+      --viz-series-4: #ecb46a; --viz-series-5: #ea88ab; --viz-series-6: #63c2d8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--background); color: var(--foreground);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 22px 56px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  code {
+    font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: .92em;
+    background: color-mix(in srgb, var(--foreground) 7%, transparent);
+    padding: 1px 5px; border-radius: 5px;
+  }
+  .text-small { font-size: 12px; }
+  .text-muted { color: var(--muted-foreground); }
+  .text-destructive { color: var(--destructive); }
+  .text-nowrap { white-space: nowrap; }
+  .card {
+    background: var(--card); color: var(--card-foreground);
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  }
+  .viz-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px; margin: 14px 0;
+  }
+  .viz-stat .viz-stat-value { font-size: 20px; font-weight: 600; margin: 2px 0; }
+  .viz-badge {
+    display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 12px;
+    background: color-mix(in srgb, var(--foreground) 8%, transparent); white-space: nowrap;
+  }
+  .nav.nav-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 12px; }
+  .nav-link {
+    appearance: none; font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--muted-foreground);
+    border-radius: 999px; padding: 4px 13px;
+  }
+  .nav-link:hover { color: var(--foreground); }
+  .nav-link.active {
+    background: var(--primary); color: var(--primary-foreground); border-color: transparent;
+  }
+  .nav-link:focus-visible { outline: 2px solid var(--viz-series-1); outline-offset: 1px; }
+  .table-responsive { overflow-x: auto; margin: 10px 0; }
+  .table { width: 100%; border-collapse: collapse; }
+  .table th {
+    text-align: left; font-weight: 500; color: var(--muted-foreground);
+    padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .table td { padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); vertical-align: top; }
+  .table tr:last-child td { border-bottom: none; }
+  .table-sm th, .table-sm td { padding: 6px 8px; font-size: 13px; }
+  ol { padding-left: 22px; margin: 8px 0; }
+  [role="tabpanel"][hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+
+<div id="flagos-roadmap">
+
+  <h1>FlagOS 赛道二 · 开发路线图 v2（天数主线）</h1>
+  <p class="text-muted">2026-11-03 → 11-20 截止（17 天）｜修订于三线实测与四项决策之后。<strong>一句话路线：P0′ 今天收尾「尺子」→ P1′ 用 launch 调优固化拿基本盘（全场最大已知杠杆）→ P2′ 调度按卡分治决 16K → P3′ W8A8 三重闸门风险投资 → P4′ 沐曦重调 + 冻结收袋</strong>；KV-int8×attention 合并项列为备选，11/15 视进度翻牌。</p>
+
+  <div class="viz-grid">
+    <div class="card viz-stat">
+      <div class="text-muted">打分结构决定打法</div>
+      <div class="viz-stat-value">70% 性能 + 30% 创新</div>
+      <div class="text-small">性能分两张卡各计一半：只交一张卡 = 丢一半性能分；创新分点名"系统级调度"。</div>
+    </div>
+    <div class="card viz-stat">
+      <div class="text-muted">资源现状（已变）</div>
+      <div class="viz-stat-value">两卡就绪 · 验证吞吐是瓶颈</div>
+      <div class="text-small">天数：算力充足，<strong>主线开发卡</strong>；沐曦：额度可再申请、节点难租 → <strong>机会式开机</strong>（抢到即开跑）。单假设验证 30-60 分钟串行队列。</div>
+    </div>
+    <div class="card viz-stat">
+      <div class="text-muted">两场景 · 两卡两剧本（实测修正）</div>
+      <div class="viz-stat-value">4K 调优算子 / 16K 分卡施策</div>
+      <div class="text-small">4K：decode 访存受限 → launch 调优 + 小 M GEMM。16K：<strong>天数 = 21GB 池容量排队</strong>（同驻上限 29/64）；<strong>沐曦 = 45-48GB 临界区</strong>（抢占主战场）。</div>
+    </div>
+  </div>
+
+  <h3>时间轴与阶段</h3>
+  <div class="gantt" role="img" aria-label="阶段时间轴：P0 收尾 11月3日；P1 launch调优与算子清扫 4日至7日；P2 调度分治 6日至12日；沐曦机会窗口 6日至18日；P3 量化 13日至17日；P4 提交 17日至20日；KV-int8 决策点 15日；截止 20日">
+    <div class="gantt-grid">
+      <div class="gantt-corner"></div>
+      <div class="gantt-days">
+        <span class="text-small text-muted">11月 →</span><span class="text-small">03</span><span class="text-small">04</span><span class="text-small">05</span><span class="text-small">06</span><span class="text-small">07</span><span class="text-small">08</span><span class="text-small">09</span><span class="text-small">10</span><span class="text-small">11</span><span class="text-small">12</span><span class="text-small">13</span><span class="text-small">14</span><span class="text-small">15</span><span class="text-small">16</span><span class="text-small">17</span><span class="text-small">18</span><span class="text-small">19</span><span class="text-small">20</span>
+      </div>
+
+      <div class="gantt-label text-small"><strong>P0′</strong> 收尾三线实测</div>
+      <div class="gantt-track"><div class="gantt-bar" style="grid-column:1/2; background:var(--viz-series-1); opacity:.45"></div></div>
+
+      <div class="gantt-label text-small"><strong>P1′</strong> launch调优+算子清扫</div>
+      <div class="gantt-track"><div class="gantt-bar" style="grid-column:2/6; background:var(--viz-series-2); opacity:.45"></div></div>
+
+      <div class="gantt-label text-small"><strong>P2′</strong> 调度分治（天数）</div>
+      <div class="gantt-track"><div class="gantt-bar" style="grid-column:4/11; background:var(--viz-series-3); opacity:.45"></div></div>
+
+      <div class="gantt-label text-small text-muted">沐曦 机会式窗口</div>
+      <div class="gantt-track"><div class="gantt-bar" style="grid-column:4/17; background:var(--viz-series-6); opacity:.25"></div></div>
+
+      <div class="gantt-label text-small"><strong>P3′</strong> W8A8<span class="text-muted">（三重闸）</span></div>
+      <div class="gantt-track"><div class="gantt-bar" style="grid-column:11/16; background:var(--viz-series-4); opacity:.45"></div></div>
+
+      <div class="gantt-label text-small"><strong>P4′</strong> 沐曦重调+提交</div>
+      <div class="gantt-track"><div class="gantt-bar" style="grid-column:15/19; background:var(--viz-series-5); opacity:.45"></div></div>
+
+      <div class="gantt-label text-small text-muted">关键节点</div>
+      <div class="gantt-track gantt-marks">
+        <span style="grid-column:13/14" class="text-small">◆ KV-int8 翻牌</span>
+        <span style="grid-column:15/16" class="text-small">◆ P3 时间盒</span>
+        <span style="grid-column:18/19" class="text-small text-destructive">◆ 截止</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav nav-pills" role="tablist" aria-label="路线图章节">
+    <button class="nav-link active" id="tab-overview" role="tab" aria-controls="panel-overview" aria-selected="true" type="button">总览·为什么这么排</button>
+    <button class="nav-link" id="tab-p0" role="tab" aria-controls="panel-p0" aria-selected="false" type="button">P0′ 收尾</button>
+    <button class="nav-link" id="tab-p1" role="tab" aria-controls="panel-p1" aria-selected="false" type="button">P1′ launch调优</button>
+    <button class="nav-link" id="tab-p2" role="tab" aria-controls="panel-p2" aria-selected="false" type="button">P2′ 调度分治</button>
+    <button class="nav-link" id="tab-p3" role="tab" aria-controls="panel-p3" aria-selected="false" type="button">P3′ 量化</button>
+    <button class="nav-link" id="tab-p4" role="tab" aria-controls="panel-p4" aria-selected="false" type="button">P4′ 提交</button>
+    <button class="nav-link" id="tab-risk" role="tab" aria-controls="panel-risk" aria-selected="false" type="button">风险与你的行动</button>
+  </div>
+
+  <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+    <h3>排序逻辑链：每一步都被实测数据逼出来</h3>
+    <ol class="logic-chain">
+      <li><strong>两卡基线已锚定</strong>（天数 4K=1879.68 / 16K=862.06 / L3=0.962；沐曦基线已测，数字待入台账）→ 不用等环境，今天收尾 P0′ 即开工。</li>
+      <li><strong>废弃仓库留下的实测证据是全场最大已知杠杆</strong>：attention launch 调优（decode w1/s1、prefill w2/s1）曾拿 4K <strong>+41.7%</strong> / 16K <strong>+46.6%</strong>（对照组仅 +1.35% 波动）→ <strong>P1′ 第一项 D0：把它固化为源码</strong>（等 A 线 T4 机理复证）。而逐元素融合（RMSNorm/RoPE/SiLU-mul）经流量预算证明上限仅 ~2%，降级为顺手项。</li>
+      <li><strong>16K 两卡两剧本</strong>（天数 32GB/池 21GB = 容量排队型，抢占待 C 线 T2 裁决；沐曦 64GB/45-48GB = 真·临界区）→ <strong>P2′ 按卡分治</strong>：天数主攻混批节奏/block_size/APC 旁路，沐曦主攻准入预留（H1），是创新分点名的主战场。</li>
+      <li><strong>量化上限高但余量仅 1.2 个点</strong>（0.962→0.95）且 sm71 硬件 int8 路径存疑（cutlass 必不触发，通用 Triton 是否走 MMA 未知）→ <strong>P3′ 主案 W8A8 动态量化 + 三重闸门</strong>（硬件闸门 40min / 三档精度预检 / 11/17 时间盒），W8A16 为退路。管线已在插件内，缺口仅转换脚本。</li>
+      <li><strong>两卡各半分 + 组委会复现 = 生命线</strong> → 沐曦侧 FlagGems tune config 是 per-vendor 的，launch 调优在 MACA 上要<strong>重调而非纯重放</strong> → 机会式窗口尽量早插 + P4′ 预留完整重调时间。</li>
+    </ol>
+
+    <h3>贯穿全程：验证分层协议（省机时的核心机制）</h3>
+    <p class="text-muted">全套验证（双场景 bench + 精度回归）约 1 小时 GPU。分层后大部分改动死在便宜的层，GPU 时间只花在真有希望的改动上。</p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>层级</th><th>验证内容</th><th>耗时</th><th>触发时机</th><th>淘汰什么</th></thead></tr>
+        <tbody>
+          <tr><td><strong>T0</strong> 算子级</td><td>micro-bench：数值一致性 + 单算子耗时（三线实测已备好脚本）</td><td>秒级</td><td>每个改动必跑</td><td>算错的、算慢的（融合也可能负收益）</td></tr>
+          <tr><td><strong>T1</strong> 单场景</td><td>官方脚本跑 4K <em>或</em> 16K 场景</td><td>10-20 分钟</td><td>T0 通过后</td><td>单点快但端到端无收益的</td></tr>
+          <tr><td><strong>T2</strong> 双场景+精度</td><td>官方脚本两场景 + evalscope Level 3</td><td>≈1 小时</td><td>动了数值逻辑 / 阶段收官</td><td>4K 涨 16K 跌的、精度破 0.95 红线的</td></tr>
+          <tr><td><strong>T3</strong> 冻结复现</td><td>干净环境完整复跑全套（pip provenance 四重验证后）</td><td>≈2 小时</td><td>提交前 1-2 次</td><td>有隐藏依赖、无法复现的（=成绩无效）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>贯穿全程：改动纪律（RSI 循环 + 三条新规）</h3>
+    <p>每个优化改动走同一条流水线：<strong>假设台账登记（目标文件/函数 + 预测机制 + 预期指标）→ 起草 patch → T0/T1 验证 → 过线才 <code>git commit</code>，不过线 revert 并记录失败原因</strong>。一次只改一个变量。台账到 P4′ 直接变成 report.pdf 的 ablation 表。实测阶段用代价换来的三条新规：</p>
+    <ol>
+      <li><strong>pip provenance 纪律</strong>：任何测量前验证插件来源（diff/md5/patch 符号消失/flag_gems 不变 四重验证）——F5 教训：装错版本一天白跑。</li>
+      <li><strong>GPU 自查纪律</strong>：<strong>单 agent 串行开发模式</strong>（2026-11-03 起，替代三线并行）：每个 GPU 步骤前自查进程与显存（<code>pgrep -f vllm</code> + <code>ixsmi</code>）；若实例仍有其他会话在跑，维持公告板协调；kill 前三重确认（无活动 bench / CSV 停更 / 仅剩孤儿）。</li>
+      <li><strong>废弃仓库数据口径</strong>：旧仓库的 D3a/D3c、KV 量化负结果、profile 数据<strong>只作证据引用并注明口径</strong>，不作代码基线（队伍已定重头开始：唯一开发仓库 = <code>github.com/rib12316/flagos_xx</code>，基线 tag <code>baseline-2026-11-03</code> = 上游 flagos-2026-s2 @13eb9be + FlagGems v5.3.5；旧仓库 flagos2_infragogogo 完全隔离）。</li>
+    </ol>
+  </div>
+
+  <div id="panel-p0" role="tabpanel" aria-labelledby="tab-p0" hidden>
+    <h3>P0′ · 收尾（今天 11/03）｜GPU ≈6h（三线实测）+1h（波动带）</h3>
+    <p><strong>P0 是什么</strong>：「评测与剖析基座」——把尺子造出来（基线锚点、波动带、热点分布、一键评测脚本），是后面一切优化的测量基础。<strong>大半已完成，今天收尾。</strong></p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>项</th><th>状态</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>天数基线锚点</td><td>✅ 已完成</td><td>4K=1879.68 tok/s、16K=862.06、math_500 L3=0.962（10-30 纯净版实测）</td></tr>
+          <tr><td>沐曦基线锚点</td><td>✅ 已测</td><td>数字与配置<strong>待补入统一台账</strong>（若未记录请从 benchmark_results CSV 回收）</td></tr>
+          <tr><td>环境净化</td><td>✅ 已执行</td><td>kill 孤儿进程 + 重装纯净插件 + provenance 四重验证 + 公告板建立</td></tr>
+          <tr><td>三线实测</td><td>⏳ 今天执行</td><td>C→A→B 顺序（~6h GPU），产出三份开发方案 + 抢占裁决 + int8 硬件闸门初判</td></tr>
+          <tr><td>波动带</td><td>⏳ 今天/明天</td><td>同配置 3 连跑看极差（±1% 判定带的前提），天数侧先做</td></tr>
+          <tr><td>台账固化</td><td>✅ 已完成</td><td>已迁入独立开发仓库 <code>flagos_xx/docs/</code>（含三线研究文档），开发记录.md v2 重开（D0-D3 已登记）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-small"><strong>交付物：</strong>三份实测开发方案（track-a/b/c-iluvatar-开发方案.md）、抢占判定、波动带数字、仓库基线 tag。<strong>止损：</strong>三线实测若 GPU 超支，按各计划自带砍序执行（C 的 T3 第二臂 → B 的 T4/T5 → A 的 T6 对照）。</p>
+  </div>
+
+  <div id="panel-p1" role="tabpanel" aria-labelledby="tab-p1" hidden>
+    <h3>P1′ · launch 调优固化 + 算子清扫 <span class="text-muted">11/04 – 11/07 ｜ GPU ≈5h</span></h3>
+    <p><strong>主菜 D0：把 attention launch 调优固化为源码。</strong>证据：废弃版 monkeypatch（decode w1/s1、prefill w2/s1）曾拿 4K +41.7% / 16K +46.6%，对照组禁用 patch 仅 +1.35%。A 线 T4 将以进程内 monkeypatch 复证机理，复证通过后落成 dispatch 层 per-shape launch config 或 FlagGems tune config（源码形态，默认启用）。<strong>合法性</strong>：kernel 执行配置调优属于框架内算子优化（FlagGems tuning 机制的本来用途），非 serve 超参、非 bench 调优。<strong>跨平台</strong>：unified_attention 是跨平台 Triton kernel，沐曦侧预期同收益但需重调参数（见沐曦窗口）。</p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>验证什么</th><th>怎么验</th><th>通过标准</th><th>为什么要验</th><th>对开发的影响</th></tr></thead>
+        <tbody>
+          <tr><td>launch 机理复证</td><td>T0：A 线 T4 脚本（默认 vs w1/s1 对照 micro-bench）</td><td>带宽利用率差复现</td><td>废弃版数据是调优版口径，需纯净版机理确认</td><td>不复证 = D0 不开工，转 GEMM 调优</td></tr>
+          <tr><td>固化后端到端</td><td>T1：官方脚本 4K 与 16K</td><td>&gt; 基线 + 波动带</td><td>micro 收益 ≠ 整机收益（图捕获/调度可能吃掉）</td><td>D0 的最终验收；预期双场景 +20% 量级</td></tr>
+          <tr><td>16K 不回退</td><td>T1：16K 场景</td><td>≥ 基线 − 1%</td><td>prefill launch（w2/s1）与 decode 最优点可能不同</td><td>回退 = 分场景 config</td></tr>
+          <tr><td>精度抽查</td><td>T2：evalscope L3（launch 不改数值，阶段收官跑一次）</td><td>≥ 0.95</td><td>兜底红线</td><td>破线 = 实现有 bug，回退排查</td></tr>
+          <tr><td>小 M GEMM 调优</td><td>T0：A 线 T3 利用率表 → per-shape tune config</td><td>单点正收益 → T1</td><td>4K decode 流量 GEMM 占 ~29%</td><td>次级收益项，D0 之后做</td></tr>
+          <tr><td>路由修复</td><td>A 线 T1 路由表裁决（占位实现/未接线 kernel）</td><td>消除慢路径</td><td>iluvatar 占位实现若被走到 = 隐性大坑</td><td>证实则单独修复项，预期明显</td></tr>
+          <tr><td>元素融合（顺手项）</td><td>T0：fused_add_rmsnorm 等 micro-bench</td><td>正收益才进 T1</td><td>流量预算证明上限 ~2%，不再投入主攻</td><td>有空档才做</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-small"><strong>交付物：</strong>D0 源码化 patch（提交开发仓库 feat/ 分支）+ 逐项收益台账。<strong>节奏：</strong>D0 验证等待间隙写 P2′ 的 SchedulerFL 代码（单人队并行方式）。</p>
+  </div>
+
+  <div id="panel-p2" role="tabpanel" aria-labelledby="tab-p2" hidden>
+    <h3>P2′ · 调度分治 <span class="text-muted">11/06 – 11/12 ｜ 天数为主，沐曦机会窗口穿插 ｜ GPU 天数 ≈4h + 沐曦 ≈4h</span></h3>
+    <p><strong>前提已具备</strong>：C 线 T6 已验证插件内注入 SchedulerFL 可行（platform.py env 门控钩子）；T2/T3 出抢占裁决。<strong>按卡分治</strong>：</p>
+    <p><strong>天数侧（容量排队型，预判弱抢占 → 分支 B）</strong>：① H3' 波次准入节奏/提前插入——旧日志指纹「16K 每 ~20s 才准入 1 条、prefill 混入步把 decode 打到 11-17 tok/s」，混批结构是主杠杆；② H4 block_size 16→64（块表 32,621 块管理开销降 4 倍，flagtree 页粒度需实测）；③ H6 prefix caching 旁路（随机 token 零命中，1024 块哈希/条纯 CPU 浪费）；④ H1 准入预留降级为保险项（T3 已实测其净值）。</p>
+    <p><strong>沐曦侧（真·临界区 45-48GB vs 46.3GB，H1 主战场）</strong>：机会窗口（抢到节点即开跑，工作包预置：基线复跑 → D0 参数重调 → 16K 抢占证据采集 → H1 准入预留 A/B）。</p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>验证什么</th><th>怎么验</th><th>通过标准</th><th>为什么要验</th><th>对开发的影响</th></tr></thead>
+        <tbody>
+          <tr><td>16K 慢的机制归因</td><td>C 线 T2/T3/T4：抢占计数 + 并发对照 + 混批切分</td><td>明确归因（排队/抢占/混批）</td><td>系统优化必须先归因，否则盲调</td><td><strong>直接决定 P2′ 天数侧改哪块</strong>，写进报告创新分</td></tr>
+          <tr><td>沐曦临界区抢占</td><td>沐曦窗口：/metrics 三路证据 + --max-num-seqs 对照</td><td>证实/证伪 H1 主战场假设</td><td>沐曦 64GB 的 16K 行为与天数不同，纸面推断需实测</td><td>证实 → H1 沐曦版开发；证伪 → 时间挪回天数侧</td></tr>
+          <tr><td>16K 性能</td><td>T1/T2：官方脚本 16K</td><td>&gt; 基线 + 波动带</td><td>P2′ 主 KPI，16K 占性能分一半</td><td>达标固化；不达标回退</td></tr>
+          <tr><td>4K 不回退</td><td>T1：官方脚本 4K</td><td>≥ 基线 − 1%</td><td>调度改动可能伤短序列（更保守准入）</td><td>两场景平均赋分，回退即白干</td></tr>
+          <tr><td>输出仍正常</td><td>T2 抽查 evalscope</td><td>≥ 0.95</td><td>调度 bug 造成输出异常 = 成绩无效</td><td>兜底红线</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-small"><strong>备选创新项（KV-int8 × attention 重写合并，11/15 翻牌）</strong>：F9 已证伪独立 KV int8（容量 1.94× 机制成立，但精度崩/无硬件加速/prefill -25%）。唯一路径 = 天数 attention 占位实现重写时原生支持 int8 KV（寄存器内 dequant + scale 预取）。<strong>翻牌条件：P1′+P2′+P3′ 基本盘已稳且时间富余</strong>；成功则 16K 同驻 29→58 + 创新分最佳素材，失败不伤基本盘。依赖 A 线 T4 的 attention 基准脚本与重写产出。</p>
+  </div>
+
+  <div id="panel-p3" role="tabpanel" aria-labelledby="tab-p3" hidden>
+    <h3>P3′ · W8A8 动态量化 <span class="text-muted text-destructive">三重闸门 ｜ 11/13 – 11/17 ｜ GPU ≈4h</span></h3>
+    <p><strong>主案（已决策采纳 B 线）</strong>：W8A8 动态 int8（per-channel 权重 + per-token 动态激活，无校准），checkpoint config 驱动（绕开「禁超参开量化」红线）。管线已完整存在于 <code>vllm_fl/quantization/w8a8/</code>，<strong>唯一开发件 = bf16→int8 转换脚本</strong>（B 线 T5 已产出种子函数）。退路链：仅 MLP 混合 → W8A16 weight-only。显存收益（B 线 T3 精确测算）：释放 ≈1.84GiB → KV +8.8% ≈ 568K tokens（同驻 +3-4 条，与调度正向叠加，但不消除排队）。</p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>闸门</th><th>内容</th><th>通过标准</th><th>失败动作</th></tr></thead>
+        <tbody>
+          <tr><td><strong>闸门 1：启动</strong></td><td>P1′+P2′ 已固化超基线收益（基本盘安全垫存在）</td><td>两项全满足才开工</td><td>不满足 → 砍 P3′，时间给 P4′ 与报告</td></tr>
+          <tr><td><strong>闸门 2：硬件</strong></td><td>sm71 通用 Triton int8 冒烟（编译/有限/误差三查）+ 15 形状加速比</td><td>M=1024 ≥1.5x 或 M=64 ≥1.2x</td><td>无 MMA 红利 → 降级 W8A16 评估或天数侧放弃（沐曦侧另测，per-vendor 路径不同）</td></tr>
+          <tr><td><strong>闸门 3：精度</strong></td><td>三档预检（8层MLP/全MLP/+attn，30 题一致率）→ 通过后全量 105 题</td><td>档位判据 + 全量 ≥0.95</td><td>逐档退级；三档全崩 → 列下一层假设（per-group/SmoothQuant）止损</td></tr>
+          <tr><td><strong>时间盒</strong></td><td>11/17 硬截止</td><td>到期未达标即回退全部量化改动</td><td>保 P4′ 绝对优先（无法复现 = 无效）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-small"><strong>规则边界提醒</strong>：量化校准如需数据用通用语料，<strong>不用 math_500</strong>（避免 benchmark 调优嫌疑——官方群边界问题 #2）；「框架内开发量」界定参考 dispatch 层已有 w8a8 实现形态（官方群边界问题 #3）。</p>
+  </div>
+
+  <div id="panel-p4" role="tabpanel" aria-labelledby="tab-p4" hidden>
+    <h3>P4′ · 沐曦重调 + 冻结提交 <span class="text-muted">11/17 – 11/20 ｜ 全程积累，最后收口 ｜ GPU 沐曦 ≈4h + 冻结 ≈2h</span></h3>
+    <p><strong>沐曦侧是「重调」不是「纯重放」</strong>：FlagGems tune config 与 launch 最优点是 per-vendor 的（_metax vs _iluvatar），D0/GEMM 调优在 MACA 上需重新跑调优流程；调度参数（同驻上限、准入阈值）按沐曦显存重算。<strong>为什么不可压缩</strong>：两卡各计一半性能分；组委会实际复现，无法复现 = 成绩无效；创新分 30% 全看报告。</p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>验证什么</th><th>怎么验</th><th>通过标准</th><th>为什么要验</th><th>对开发的影响</th></tr></thead>
+        <tbody>
+          <tr><td>沐曦侧也有效</td><td>全部改动 MACA 重调 + 双场景 bench</td><td>沐曦侧也超基线</td><td>只交一张卡 = 丢一半性能分</td><td>不生效项做 metax 路径适配或弃用</td></tr>
+          <tr><td>可复现性</td><td>T3：全新环境（pip provenance 验证后）官方脚本完整复跑两卡</td><td>与台账一致（±1%）</td><td>组委会按 readme 复现</td><td>暴露漏提交文件/漏写步骤——最常见死法</td></tr>
+          <tr><td>提交物合规</td><td>对照 §6：<code>infragogogo.zip</code>（vllm-plugin-FL/ FlagGems/ report.pdf readme.md）</td><td>结构完整、命令可复制</td><td>形式缺陷直接影响评审</td><td>策略必须体现在代码且最终版本启用</td></tr>
+          <tr><td>报告证据链</td><td>每个优化项 ablation：台账（预测-实测对照）+ 剖析图 + 机制解释</td><td>全部有据可查</td><td>创新分 = 专家看报告投票</td><td>P0′ 起的台账在此变现，不临时补数据</td></tr>
+          <tr><td>PR 准备</td><td>按 PR 样例整理（获奖后 3 个工作日内提交）</td><td>标题格式合规</td><td>逾期 = 取消获奖资格</td><td>提前备好，评审后即时提交</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-small"><strong>日常纪律（全程）：</strong>沐曦节点不用即关（每 36h 开关机一次防数据丢失）；所有改动当日 push <code>github.com/rib12316/flagos_xx</code>（唯一开发仓库，feat/ 分支从 baseline-2026-11-03 切出）；实例产物定期回传本地（实例会被回收）。</p>
+  </div>
+
+  <div id="panel-risk" role="tabpanel" aria-labelledby="tab-risk" hidden>
+    <h3>风险与你的行动</h3>
+    <p class="text-muted">分四类：⚖️ 边界项（问官方群）、🔧 技术项、⏳ 资源项、✅ 已解决。前一类需要<strong>你</strong>行动。</p>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>级</th><th>事项</th><th>影响</th><th>行动 / 缓解</th></tr></thead>
+        <tbody>
+          <tr><td><span class="viz-badge">⚖️ 边界</span></td><td><code>benchmark_throughput_autotune.py</code> 的合法用途边界</td><td>是 agent 循环的现成钩子还是禁区</td><td><strong>问官方群</strong>：它调框架内 kernel 配置（合法）还是 serve 参数（违法）</td></tr>
+          <tr><td><span class="viz-badge">⚖️ 边界</span></td><td>量化校准数据：用 math_500 算不算 benchmark 调优</td><td>P3′ 踩线 = 成绩无效</td><td><strong>问官方群</strong>；默认通用语料，不碰评测集</td></tr>
+          <tr><td><span class="viz-badge">⚖️ 边界</span></td><td>launch 调优固化是否属「框架内算子优化」</td><td>P1′ 主菜的合规性（判读为是，但求个准话）</td><td><strong>问官方群</strong>：per-shape kernel 执行配置调优 = FlagGems tuning 机制的本来用途</td></tr>
+          <tr><td><span class="viz-badge">🔧 技术</span></td><td>pip provenance 污染（F5 教训）</td><td>装错版本一切测量作废</td><td>已列全程纪律：测量前四重验证</td></tr>
+          <tr><td><span class="viz-badge">🔧 技术</span></td><td>D0 机理在纯净版不复现</td><td>P1′ 主菜落空</td><td>A 线 T4 先复证再开工；落空转 GEMM 调优 + 路由修复</td></tr>
+          <tr><td><span class="viz-badge">🔧 技术</span></td><td>sm71 int8 无 MMA 红利</td><td>P3′ 天数侧降级</td><td>闸门 2 快速裁决（40min）；沐曦侧 per-vendor 另测</td></tr>
+          <tr><td><span class="viz-badge">🔧 技术</span></td><td>KV int8 独立路径已证伪（F9）</td><td>16K 容量翻倍只剩合并项一条路</td><td>备选创新项 11/15 翻牌，不提前投入</td></tr>
+          <tr><td><span class="viz-badge">⏳ 资源</span></td><td>沐曦节点难租（额度不愁，节点 0/4）</td><td>沐曦侧工作窗口不确定</td><td>机会式策略：工作包预置（基线复跑/D0 重调/H1 验证三件套），每天刷模力方舟，抢到即开；额度不足发邮件再申请（pei.ma@metax-tech.com，上限 300 元）</td></tr>
+          <tr><td><span class="viz-badge">⏳ 资源</span></td><td>波动带未实测</td><td>「多小的提升算真提升」未知</td><td>今天/明天 3 连跑补上</td></tr>
+          <tr><td><span class="viz-badge">⏳ 资源</span></td><td>单人 + 阶段重叠</td><td>验证等待时间浪费</td><td>bench 等待间隙写下一阶段代码/跑 T0</td></tr>
+          <tr><td><span class="viz-badge">✅ 已解决</span></td><td>天数算力申请、两卡基线、环境净化</td><td>—</td><td>沐曦基线数字记得补入台账</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>你的行动清单（本周）</h3>
+    <ol>
+      <li><strong>问官方群 3 个边界问题</strong>（上表 ⚖️ 三项）——直接决定 P1′ 主菜合规形态与 P3′ 做法不必返工。</li>
+      <li><strong>把沐曦基线数字补进统一台账</strong>（从 benchmark_results CSV 回收，含配置与日期）。</li>
+      <li><strong>每天刷模力方舟抢沐曦节点</strong>（64GB 带券 + 指定镜像）；抢到先跑工作包三件套。</li>
+      <li>额度吃紧前发邮件申请追加沐曦券（附作品描述，上限 300 元）。</li>
+    </ol>
+    <p class="text-small text-muted">我可以直接代劳的：D0 固化 patch 骨架、SchedulerFL 开发脚手架、沐曦工作包脚本（基线复跑/D0 重调/H1 验证一键化）、假设台账迁入开发仓库——说一声即开工。</p>
+  </div>
+
+  <style>
+    #flagos-roadmap .gantt { margin: 8px 0 4px; }
+    #flagos-roadmap .gantt-grid { display: grid; grid-template-columns: minmax(96px, 148px) 1fr; row-gap: 6px; align-items: center; }
+    #flagos-roadmap .gantt-days { display: grid; grid-template-columns: repeat(18, 1fr); }
+    #flagos-roadmap .gantt-days span { text-align: center; }
+    #flagos-roadmap .gantt-track { display: grid; grid-template-columns: repeat(18, 1fr); height: 22px; align-items: center; }
+    #flagos-roadmap .gantt-bar { height: 14px; border-radius: 4px; }
+    #flagos-roadmap .gantt-marks span { text-align: left; white-space: nowrap; }
+    #flagos-roadmap .logic-chain { padding-left: 20px; display: grid; gap: 6px; }
+    #flagos-roadmap .logic-chain li { margin: 0; }
+    #flagos-roadmap .nav.nav-pills { margin: 14px 0 10px; }
+    #flagos-roadmap table th { white-space: nowrap; }
+  </style>
+
+  <script>
+    (function () {
+      var root = document.getElementById('flagos-roadmap');
+      if (!root) return;
+
+      var tabs = Array.prototype.slice.call(root.querySelectorAll('[role="tab"]'));
+      var panels = tabs.map(function (t) {
+        return document.getElementById(t.getAttribute('aria-controls'));
+      });
+
+      function activate(idx) {
+        tabs.forEach(function (t, i) {
+          var on = i === idx;
+          t.classList.toggle('active', on);
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          if (panels[i]) panels[i].hidden = !on;
+        });
+      }
+
+      tabs.forEach(function (t, i) {
+        t.addEventListener('click', function () { activate(i); });
+      });
+    })();
+  </script>
+</div>
+
+</main>
+</body>
+</html>
