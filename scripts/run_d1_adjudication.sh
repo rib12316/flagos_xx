@@ -25,6 +25,14 @@ mkdir -p "$OUT"
 # ---- 起服（官方参数逐字）+ metrics 抓取 ----
 pkill -f "vllm serve" 2>/dev/null || true; sleep 3
 pkill -f scrape_metrics.sh 2>/dev/null || true
+# pkill 父进程后 EngineCore 子进程可能成孤儿继续占 GPU（run2 实证），清到显存空闲为止
+for i in $(seq 1 20); do
+    MEM=$(ixsmi 2>/dev/null | grep -oE "[0-9]+MiB / 32768MiB" | head -1 | grep -oE "^[0-9]+" || echo 0)
+    [[ "${MEM:-0}" -lt 1000 ]] && { echo "GPU 空闲(${MEM}MiB)"; break; }
+    echo "GPU 仍被占 ${MEM}MiB，清理孤儿 vllm 进程..."
+    pgrep -f "vllm|EngineCore" 2>/dev/null | while read -r pid; do kill -9 "$pid" 2>/dev/null; done
+    sleep 5
+done
 VLLM_PLUGINS=fl VLLM_FL_SCHED_FL=1 nohup vllm serve "$MODEL_PATH" \
     --port "$PORT" \
     --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY"}' \
@@ -43,8 +51,18 @@ for i in $(seq 1 360); do
 done
 
 # ---- 骨架生效检查（T0）+ 冒烟（防呆：起服 6min 白等）----
-echo "== T0: SchedulerFL 生效检查 =="
-grep -m1 "SchedulerFL(diag) banner" "$OUT/serve.log" || { echo "❌ banner 未出现"; tail -30 "$OUT/serve.log"; pkill -f "vllm serve"; exit 1; }
+# 注意：/v1/models 就绪可能早于 EngineCore 调度器实例化完成，banner 用等待循环而非即时 grep
+echo "== T0: SchedulerFL 生效检查（banner 最多等 180s）=="
+BANNER=""
+for i in $(seq 1 36); do
+    BANNER=$(grep -m1 "SchedulerFL(diag) banner" "$OUT/serve.log" || true)
+    [[ -n "$BANNER" ]] && break
+    sleep 5
+done
+if [[ -z "$BANNER" ]]; then
+    echo "❌ banner 未出现"; tail -30 "$OUT/serve.log"; pkill -f "vllm serve"; exit 1
+fi
+echo "$BANNER"
 grep -m2 "GPU KV cache size\|GPU KV cache" "$OUT/serve.log" || true
 SMOKE=$(curl -s http://127.0.0.1:$PORT/v1/completions -H "Content-Type: application/json" \
   -d '{"model":"minicpm","prompt":"The capital of France is","max_tokens":12,"temperature":0}')
