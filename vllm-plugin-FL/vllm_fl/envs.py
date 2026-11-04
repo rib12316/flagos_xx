@@ -26,6 +26,8 @@ fl_vllm_environment_variables: dict[str, Callable[[], Any]] = {
     "VLLM_FL_MAX_BATCHED_TOKENS": lambda: os.environ.get(
         "VLLM_FL_MAX_BATCHED_TOKENS", ""
     ),
+    # 准入 watermark 覆盖（H7/H1：消灭容量钉死期的周期性抢占）
+    "VLLM_FL_WATERMARK": lambda: os.environ.get("VLLM_FL_WATERMARK", ""),
 }
 
 

@@ -244,6 +244,26 @@ class PlatformFL(Platform):
                     _fl_mnbt_val,
                 )
 
+        # --------------------------------------------------------
+        # D1 · H7/H1：准入 watermark（env 门控，默认不生效=0.0）。
+        # 机制（裁决轮实证）：ISL-only 准入（reserve_full_isl）在 16K 容量钉死时
+        # 是 razor-thin——第 30 条准入后余量(1901 块) < 30 条 decode 终身需求
+        # (1920 块)，鸽笼注定周期性 decode 分配失败 → 抢占最新者、废其半程
+        # prefill（实测每轮 3-5 次 ≈ 2-3% 输入 token 纯浪费）。
+        # watermark 在 kv_cache_manager.allocate_slots 的 WAITING/PREEMPTED
+        # 准入路径加 required=ISL块+watermark×总块 → 等效 H1 的准入预留，
+        # 纯 config 无需子类。0.03×32621≈978 块 ≈ 一条请求 decode 余量。
+        _fl_wm = os.environ.get("VLLM_FL_WATERMARK", "")
+        if _fl_wm:
+            _fl_wm_val = float(_fl_wm)
+            if 0.0 <= _fl_wm_val < 1.0:
+                vllm_config.scheduler_config.watermark = _fl_wm_val
+                logger.info(
+                    "FL: VLLM_FL_WATERMARK=%s -> scheduler_config.watermark", _fl_wm
+                )
+            else:
+                logger.warning("FL: VLLM_FL_WATERMARK=%s 越界 [0,1)，忽略", _fl_wm)
+
         if cache_config and cache_config.block_size is None:
             # Ascend NPU requires block_size to be a multiple of 128
             # CUDA can use smaller block sizes like 16
