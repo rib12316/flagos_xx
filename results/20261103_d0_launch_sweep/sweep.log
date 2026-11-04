@@ -1,0 +1,41 @@
+INFO 11-03 23:24:36 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-03 23:24:36 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-03 23:24:36 [__init__.py:49] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+/usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:728: DeprecationWarning: use_cuda_graph is deprecated; use benchmark_mode='replay' or benchmark_mode='event'
+  super().__init__(*args, **kwargs)
+/usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
+  resolved_benchmark = resolve_benchmarker(
+INFO 11-03 23:24:46 [__init__.py:237] Platform plugin fl is activated
+/usr/local/lib/python3.12/site-packages/torch/jit/_script.py:362: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+[2026-11-03 23:26:09] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.iluvatar] patch_sampler_compile_for_iluvatar: unwrapped topk_topp_sampler.compiled_random_sample
+[2026-11-03 23:26:09] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.iluvatar] patch_sampler_compile_for_iluvatar: unwrapped logprobs.batched_count_greater_than
+[2026-11-03 23:26:09] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（7 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+[2026-11-03 23:26:09] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.iluvatar] patch_torch_inductor_for_iluvatar: backend '['iluvatar']' already supports target='cuda', no GPUTarget remap needed.
+环境: Iluvatar BI-V150; ARMS=['auto', 'w1s1', 'w1s2', 'w1s3', 'w2s1', 'w2s2', 'w2s3', 'w4s1', 'w4s2', 'w4s3', 'w8s1', 'w8s2', 'w8s3']
+
+== decode 3D ==
+decode bs=16 kv=4096               default=    441.6µs | w1s1=268.2 w2s1=275.6 w4s1=328.7 | best=w1s1 (1.647x)
+decode bs=32 kv=4096               default=    855.7µs | w2s1=505.1 w4s1=642.2 w2s2=708.7 | best=w2s1 (1.694x)
+decode bs=32 kv=16384              default=   3126.2µs | w1s1=1850.4 w2s1=1900.5 w4s1=2267.2 | best=w1s1 (1.690x)
+decode bs=64 kv=4096               default=   1694.9µs | w1s1=954.2 w2s1=997.0 w4s1=1175.8 | best=w1s1 (1.776x)
+decode bs=64 kv=16384              default=   6229.6µs | w1s1=3375.0 w2s1=3669.1 w4s1=4408.0 | best=w1s1 (1.846x)
+
+== prefill 2D ==
+prefill bs=8 kv=4096 q=1024        default=  70033.4µs | w2s1=46461.3 w4s1=48560.7 w4s2=50714.2 | best=w2s1 (1.507x)
+prefill bs=8 kv=16384 q=1024       default= 307427.7µs | w2s1=204279.2 w4s1=215774.8 w4s2=222809.1 | best=w2s1 (1.505x)
+
+== 再生 LAUNCH_TABLE（贴回 attn_launch_config.py）==
+# sweep_attn_launch.py 再生于 20261103_232448（重调检查点：P2′/P3′/冻结前终扫后重跑）
+LAUNCH_TABLE = {
+    ("decode", "le16", "le8k"): (1, 1),
+    ("decode", "le32", "le32k"): (1, 1),
+    ("decode", "le32", "le8k"): (2, 1),
+    ("decode", "le64", "le32k"): (1, 1),
+    ("decode", "le64", "le8k"): (1, 1),
+    ("prefill", "le16", "le32k"): (2, 1),
+    ("prefill", "le16", "le8k"): (2, 1),
+}
+
+产出: results/20261103_d0_launch_sweep/sweep_raw.csv, sweep_table.py, sweep_table.json
+A/B: VLLM_FL_ATTN_LAUNCH_TABLE=/flagos_比赛/flagos_xx/results/20261103_d0_launch_sweep/sweep_table.json
