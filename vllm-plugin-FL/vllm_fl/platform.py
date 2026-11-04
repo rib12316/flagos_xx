@@ -182,8 +182,10 @@ class PlatformFL(Platform):
         # --------------------------------------------------------
         # D1 调度线：诊断版调度器注入（env 门控，默认关闭 = 零行为变化）。
         # 此处位于 VllmConfig.__post_init__，早于 EngineCore 的
-        # get_scheduler_cls()，故字符串注入可生效（会绕开 AsyncScheduler
-        # 选择，但默认本就是 sync Scheduler，无行为差异）。
+        # get_scheduler_cls()，故字符串注入可生效。注意：本构建
+        # async_scheduling 默认自动开启（默认调度器是 AsyncScheduler），
+        # SchedulerFL 必须继承 AsyncScheduler 以保留 async 簿记链
+        # （见 scheduler_diag_fl.py 模块 docstring 的踩坑记录）。
         if os.environ.get("VLLM_FL_SCHED_FL", "0") == "1":
             vllm_config.scheduler_config.scheduler_cls = (
                 "vllm_fl.worker.scheduler_diag_fl.SchedulerFL"
@@ -193,6 +195,55 @@ class PlatformFL(Platform):
             )
 
         cache_config = vllm_config.cache_config
+
+        # --------------------------------------------------------
+        # D1 · H4：KV cache block_size 覆盖（env 门控，默认不生效）。
+        # 必须在下方 block_size is None 分支之前显式赋值——显式值优先，
+        # 上游 L196 的平台默认（iluvatar→16）只填 None。
+        _fl_bs = os.environ.get("VLLM_FL_BLOCK_SIZE", "")
+        if _fl_bs:
+            cache_config.block_size = int(_fl_bs)
+            logger.info(
+                "FL: VLLM_FL_BLOCK_SIZE=%s -> cache_config.block_size", _fl_bs
+            )
+
+        # --------------------------------------------------------
+        # D1 · H6：prefix caching 强制开关（env 门控，默认不生效=跟随上游开）。
+        # 注意：官方 bench 不传 --seed（默认 0，确定性 prompt）且 4 轮同进程，
+        # 计分轮（2-4 轮）存在跨轮前缀命中——盲关可能降 4K 分，方向由裁决轮
+        # E4（vllm:prompt_tokens_cached 逐轮差分）实测定。
+        _fl_apc = os.environ.get("VLLM_FL_APC", "")
+        if _fl_apc:
+            vllm_config.cache_config.enable_prefix_caching = _fl_apc == "1"
+            logger.info(
+                "FL: VLLM_FL_APC=%s -> enable_prefix_caching=%s",
+                _fl_apc,
+                _fl_apc == "1",
+            )
+
+        # --------------------------------------------------------
+        # D1 · H3'（第一级）：max_num_batched_tokens 覆盖（env 门控，默认不生效）。
+        # Scheduler.__init__ 才从 max_num_batched_tokens 解析
+        # max_num_scheduled_tokens，晚于此处 → 单改一处即生效。
+        # 风险：该值同时决定 profile 峰值 → KV 池缩水（T0 用
+        # "GPU KV cache size" 行核查，缩 >2% 判死）。
+        _fl_mnbt = os.environ.get("VLLM_FL_MAX_BATCHED_TOKENS", "")
+        if _fl_mnbt:
+            _fl_mnbt_val = int(_fl_mnbt)
+            _fl_mns = vllm_config.scheduler_config.max_num_seqs
+            if _fl_mnbt_val < _fl_mns:
+                logger.warning(
+                    "FL: VLLM_FL_MAX_BATCHED_TOKENS=%d < max_num_seqs=%d，忽略",
+                    _fl_mnbt_val,
+                    _fl_mns,
+                )
+            else:
+                vllm_config.scheduler_config.max_num_batched_tokens = _fl_mnbt_val
+                logger.info(
+                    "FL: VLLM_FL_MAX_BATCHED_TOKENS=%d -> max_num_batched_tokens",
+                    _fl_mnbt_val,
+                )
+
         if cache_config and cache_config.block_size is None:
             # Ascend NPU requires block_size to be a multiple of 128
             # CUDA can use smaller block sizes like 16
