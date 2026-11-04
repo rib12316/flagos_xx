@@ -179,6 +179,19 @@ class PlatformFL(Platform):
 
         parallel_config.worker_cls = "vllm_fl.worker.worker.WorkerFL"
 
+        # --------------------------------------------------------
+        # D1 调度线：诊断版调度器注入（env 门控，默认关闭 = 零行为变化）。
+        # 此处位于 VllmConfig.__post_init__，早于 EngineCore 的
+        # get_scheduler_cls()，故字符串注入可生效（会绕开 AsyncScheduler
+        # 选择，但默认本就是 sync Scheduler，无行为差异）。
+        if os.environ.get("VLLM_FL_SCHED_FL", "0") == "1":
+            vllm_config.scheduler_config.scheduler_cls = (
+                "vllm_fl.worker.scheduler_diag_fl.SchedulerFL"
+            )
+            logger.info(
+                "FL: VLLM_FL_SCHED_FL=1 -> scheduler_cls = SchedulerFL (diag-only)"
+            )
+
         cache_config = vllm_config.cache_config
         if cache_config and cache_config.block_size is None:
             # Ascend NPU requires block_size to be a multiple of 128
