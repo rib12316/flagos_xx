@@ -35,11 +35,24 @@ env 门控 VLLM_FL_SCHED_FL=1，默认关闭 = 零行为变化。
 import os
 import time
 
-from vllm.logger import init_logger
+import logging
+
 from vllm.v1.core.sched.async_scheduler import AsyncScheduler
 from vllm.v1.core.sched.output import SchedulerOutput
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
+
+# 自防御日志挂载：vllm 的 dictConfig 只配置 "vllm" 层级（propagate=False），
+# EngineCore 子进程内 root logger 未配置（有效级别 WARNING）——vllm_fl.* 的
+# INFO 会在级别检查即被丢弃（实证：stderr 探针可打而 logger.info 静默）。
+# 诊断模块自挂 StreamHandler 直通 stderr（EngineCore stderr 会被父进程
+# 中继进 serve.log，实证：[fl.sched.probe] 行带 (EngineCore pid=) 前缀）。
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 
 class SchedulerFL(AsyncScheduler):
