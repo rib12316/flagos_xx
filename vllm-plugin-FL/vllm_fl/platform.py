@@ -179,7 +179,91 @@ class PlatformFL(Platform):
 
         parallel_config.worker_cls = "vllm_fl.worker.worker.WorkerFL"
 
+        # --------------------------------------------------------
+        # D1 调度线：诊断版调度器注入（env 门控，默认关闭 = 零行为变化）。
+        # 此处位于 VllmConfig.__post_init__，早于 EngineCore 的
+        # get_scheduler_cls()，故字符串注入可生效。注意：本构建
+        # async_scheduling 默认自动开启（默认调度器是 AsyncScheduler），
+        # SchedulerFL 必须继承 AsyncScheduler 以保留 async 簿记链
+        # （见 scheduler_diag_fl.py 模块 docstring 的踩坑记录）。
+        if os.environ.get("VLLM_FL_SCHED_FL", "0") == "1":
+            vllm_config.scheduler_config.scheduler_cls = (
+                "vllm_fl.worker.scheduler_diag_fl.SchedulerFL"
+            )
+            logger.info(
+                "FL: VLLM_FL_SCHED_FL=1 -> scheduler_cls = SchedulerFL (diag-only)"
+            )
+
         cache_config = vllm_config.cache_config
+
+        # --------------------------------------------------------
+        # D1 · H4：KV cache block_size 覆盖（env 门控，默认不生效）。
+        # 必须在下方 block_size is None 分支之前显式赋值——显式值优先，
+        # 上游 L196 的平台默认（iluvatar→16）只填 None。
+        _fl_bs = os.environ.get("VLLM_FL_BLOCK_SIZE", "")
+        if _fl_bs:
+            cache_config.block_size = int(_fl_bs)
+            logger.info(
+                "FL: VLLM_FL_BLOCK_SIZE=%s -> cache_config.block_size", _fl_bs
+            )
+
+        # --------------------------------------------------------
+        # D1 · H6：prefix caching 强制开关（env 门控，默认不生效=跟随上游开）。
+        # 注意：官方 bench 不传 --seed（默认 0，确定性 prompt）且 4 轮同进程，
+        # 计分轮（2-4 轮）存在跨轮前缀命中——盲关可能降 4K 分，方向由裁决轮
+        # E4（vllm:prompt_tokens_cached 逐轮差分）实测定。
+        _fl_apc = os.environ.get("VLLM_FL_APC", "")
+        if _fl_apc:
+            vllm_config.cache_config.enable_prefix_caching = _fl_apc == "1"
+            logger.info(
+                "FL: VLLM_FL_APC=%s -> enable_prefix_caching=%s",
+                _fl_apc,
+                _fl_apc == "1",
+            )
+
+        # --------------------------------------------------------
+        # D1 · H3'（第一级）：max_num_batched_tokens 覆盖（env 门控，默认不生效）。
+        # 【负结果存档 2026-11-05】8192 曾按 T0.5 16K 热轮 +1.77% 临时采纳，但 T1
+        # 官方双场景 4K 侧回退 -12%~-35%（轮 1401/2366/1714 vs 对照 2508/2706/2762，
+        # 非单调劣化）——mnbt 的收益场景不对称（16K 多 chunk 串行化解除受益，4K
+        # 单 chunk 大步混批受害），双场景均分口径否决，回退默认不生效。
+        # 产物：results/20261105_d1_t05_mnbt8192（16K 正）、results/20261104_d1_t1
+        # （4K 负，T1 中止于 4K 轮 3 后）。env 保留作后续扫描入口（如 4096）。
+        # Scheduler.__init__ 才从 max_num_batched_tokens 解析
+        # max_num_scheduled_tokens，晚于此处 → 单改一处即生效。
+        _fl_mnbt = os.environ.get("VLLM_FL_MAX_BATCHED_TOKENS", "")
+        if _fl_mnbt:
+            _fl_mnbt_val = int(_fl_mnbt)
+            _fl_mns = vllm_config.scheduler_config.max_num_seqs
+            if _fl_mnbt_val < _fl_mns:
+                logger.warning(
+                    "FL: VLLM_FL_MAX_BATCHED_TOKENS=%d < max_num_seqs=%d，忽略",
+                    _fl_mnbt_val,
+                    _fl_mns,
+                )
+            else:
+                vllm_config.scheduler_config.max_num_batched_tokens = _fl_mnbt_val
+
+        # --------------------------------------------------------
+        # D1 · H7/H1：准入 watermark。
+        # 代码级默认 0.06（2026-11-05 采纳）。机制（裁决轮实证+鸽笼定标）：
+        # ISL-only 准入（wm=0）在 16K 容量钉死时是 razor-thin——第 30 条准入后
+        # 余量 1901 块 < 30 条 decode 终身需求 1920 块 → 每 ~1024 步必然 decode
+        # 分配失败 → 抢占最新者废其半程 prefill（基线 4-8 次/轮）。零抢占预留量
+        # = 1920 块 / 32375 ≈ 0.059 → 取 0.06（1943 块）。T0.5 实测（mnbt=8192
+        # 载体）：cum=0 双轮零抢占、同驻钉 29（= H1 公式 ⌊pool/(ISL+max_tokens)⌋
+        # 预测值）。4K 侧 usage 峰值 0.63 永不触闸（T1 实测确认），零影响；
+        # 16K 在 mnbt=2048 下载体下预期消 4 次/轮抢占废工。
+        # env VLLM_FL_WATERMARK 可覆盖（=0 恢复上游默认）。
+        # 传递链：platform config → SchedulerConfig.watermark →
+        # KVCacheManager(watermark=)（scheduler.py L266），WAITING/PREEMPTED
+        # 准入路径生效（kv_cache_manager.py L363-386）。
+        _fl_wm = os.environ.get("VLLM_FL_WATERMARK", "0.06")
+        if _fl_wm:
+            _fl_wm_val = float(_fl_wm)
+            if 0.0 <= _fl_wm_val < 1.0:
+                vllm_config.scheduler_config.watermark = _fl_wm_val
+
         if cache_config and cache_config.block_size is None:
             # Ascend NPU requires block_size to be a multiple of 128
             # CUDA can use smaller block sizes like 16

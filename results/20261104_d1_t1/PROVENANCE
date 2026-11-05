@@ -1,0 +1,2 @@
+断言通过: mnbt=8192 wm=0.06 apc=True bs=16
+INFO 11-05 17:43:09 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])

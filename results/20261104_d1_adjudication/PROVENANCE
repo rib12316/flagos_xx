@@ -1,0 +1,7 @@
+date: 2026-11-04T22:35:12+08:00
+git_rev: e72e1c45fae64b67bcff04472d5029fb70e28608
+git_branch: feat/d1-scheduler-fl
+git_dirty: 1 files
+env: VLLM_PLUGINS=fl VLLM_FL_SCHED_FL=1 SCRAPE_INTERVAL=2
+serve_cmd: vllm serve /workspace/MiniCPM5-2B --port 9031 --compilation-config {cudagraph_mode: FULL_DECODE_ONLY} --served-model-name minicpm --gpu-memory-utilization 0.85 --max-model-len 131072
+purpose: D1 adjudication (preemption + cross-round APC hit rate)

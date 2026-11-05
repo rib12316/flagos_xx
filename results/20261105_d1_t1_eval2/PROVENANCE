@@ -1,0 +1,1 @@
+INFO 11-05 21:25:38 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
