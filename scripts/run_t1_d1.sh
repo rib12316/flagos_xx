@@ -9,7 +9,7 @@ STAGE="${1:-all}"
 PORT=9031
 MODEL_PATH=/workspace/MiniCPM5-2B
 SERVED_NAME=minicpm
-OUT="$REPO_ROOT/results/20261104_d1_t1"
+OUT="${D1_OUT:-$REPO_ROOT/results/20261104_d1_t1}"
 mkdir -p "$OUT"
 
 start_serve() {
@@ -56,7 +56,7 @@ run_bench() {
       --test-cases '[[4096,1024,64,256],[16384,1024,64,128]]' \
       2>&1 | tee "$OUT/benchmark.log" | tail -8)
     LATEST=$(ls -t /workspace/benchmark_results/summary_*.csv 2>/dev/null | head -1)
-    cp "$LATEST" "$OUT/" && cp "/workspace/benchmark_results/raw_runs_$(basename "$LATEST" .csv | sed 's/summary_//')" "$OUT/ 2>/dev/null" || true
+    LATEST_RAW="${LATEST/summary_/raw_runs_}"; cp "$LATEST" "$OUT/"; cp "$LATEST_RAW" "$OUT/" 2>/dev/null || true
     echo "summary: $OUT/$(basename "$LATEST")"
 }
 
