@@ -31,13 +31,20 @@ start_serve() {
 
 t0_d1_check() {
     echo "== T0: D1 调度配置生效检查 =="
-    echo "-- FL: 配置行（block_size / APC / mnbt / scheduler_cls，按采纳集应出现的行）:"
-    grep -E "FL: VLLM_FL_" "$OUT/serve.log" | sort -u || echo "(无 env 覆盖行——若采纳项已代码级默认则为预期)"
-    echo "-- 代码级默认生效证据:"
+    echo "-- KV 池（采纳默认 8192/0.06 下应为 ~518,096 tokens；上游默认为 521,936）:"
     grep -m2 "GPU KV cache size" "$OUT/serve.log" || true
-    grep -m1 "block_size" "$OUT/serve.log" | head -1 || true
-    echo "-- D0 launch 表仍生效:"
+    echo "-- D0 launch 表仍生效（fl.attn-launch 行数）:"
     grep -c "fl.attn-launch" "$OUT/serve.log" || true
+    echo "-- config 级采纳断言（无 env，直接检验最终 VllmConfig 对象）:"
+    (cd /tmp && env -u VLLM_FL_MAX_BATCHED_TOKENS -u VLLM_FL_WATERMARK VLLM_PLUGINS=fl python3 -c "
+from vllm.engine.arg_utils import EngineArgs
+from vllm.usage.usage_lib import UsageContext
+cfg = EngineArgs(model='$MODEL_PATH', max_model_len=131072).create_engine_config(usage_context=UsageContext.OPENAI_API_SERVER)
+sc = cfg.scheduler_config
+assert sc.max_num_batched_tokens == 8192, sc.max_num_batched_tokens
+assert sc.watermark == 0.06, sc.watermark
+assert cfg.cache_config.enable_prefix_caching is True
+print(f'断言通过: mnbt={sc.max_num_batched_tokens} wm={sc.watermark} apc={cfg.cache_config.enable_prefix_caching} bs={cfg.cache_config.block_size}')" 2>/dev/null | tail -1) | tee -a "$OUT/PROVENANCE"
 }
 
 run_bench() {

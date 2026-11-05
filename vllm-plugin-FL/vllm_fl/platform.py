@@ -222,12 +222,15 @@ class PlatformFL(Platform):
             )
 
         # --------------------------------------------------------
-        # D1 · H3'（第一级）：max_num_batched_tokens 覆盖（env 门控，默认不生效）。
+        # D1 · H3'（第一级）：max_num_batched_tokens。
+        # 代码级默认 8192（2026-11-05 T0.5 过线采纳：热轮 1286.85/+1.77% 单独、
+        # 与 wm 组合 1310.43/+3.64%；借用上游 arg_utils 对 ≥70GiB GPU 的
+        # OPENAI_API_SERVER 同款默认值）。env VLLM_FL_MAX_BATCHED_TOKENS 可覆盖
+        # （=2048 恢复上游小卡默认）。KV 池缩水已核：521,936→518,096 tokens
+        # （-0.74%，<2% 判死线）。
         # Scheduler.__init__ 才从 max_num_batched_tokens 解析
         # max_num_scheduled_tokens，晚于此处 → 单改一处即生效。
-        # 风险：该值同时决定 profile 峰值 → KV 池缩水（T0 用
-        # "GPU KV cache size" 行核查，缩 >2% 判死）。
-        _fl_mnbt = os.environ.get("VLLM_FL_MAX_BATCHED_TOKENS", "")
+        _fl_mnbt = os.environ.get("VLLM_FL_MAX_BATCHED_TOKENS", "8192")
         if _fl_mnbt:
             _fl_mnbt_val = int(_fl_mnbt)
             _fl_mns = vllm_config.scheduler_config.max_num_seqs
@@ -239,30 +242,25 @@ class PlatformFL(Platform):
                 )
             else:
                 vllm_config.scheduler_config.max_num_batched_tokens = _fl_mnbt_val
-                logger.info(
-                    "FL: VLLM_FL_MAX_BATCHED_TOKENS=%d -> max_num_batched_tokens",
-                    _fl_mnbt_val,
-                )
 
         # --------------------------------------------------------
-        # D1 · H7/H1：准入 watermark（env 门控，默认不生效=0.0）。
-        # 机制（裁决轮实证）：ISL-only 准入（reserve_full_isl）在 16K 容量钉死时
-        # 是 razor-thin——第 30 条准入后余量(1901 块) < 30 条 decode 终身需求
-        # (1920 块)，鸽笼注定周期性 decode 分配失败 → 抢占最新者、废其半程
-        # prefill（实测每轮 3-5 次 ≈ 2-3% 输入 token 纯浪费）。
-        # watermark 在 kv_cache_manager.allocate_slots 的 WAITING/PREEMPTED
-        # 准入路径加 required=ISL块+watermark×总块 → 等效 H1 的准入预留，
-        # 纯 config 无需子类。0.03×32621≈978 块 ≈ 一条请求 decode 余量。
-        _fl_wm = os.environ.get("VLLM_FL_WATERMARK", "")
+        # D1 · H7/H1：准入 watermark。
+        # 代码级默认 0.06（2026-11-05 T0.5 过线采纳）。机制（裁决轮实证+鸽笼定标）：
+        # ISL-only 准入（wm=0）在 16K 容量钉死时是 razor-thin——第 30 条准入后
+        # 余量 1901 块 < 30 条 decode 终身需求 1920 块 → 每 ~1024 步必然 decode
+        # 分配失败 → 抢占最新者废其半程 prefill（基线 4-8 次/轮）。零抢占预留量
+        # = 1920 块 / 32375 ≈ 0.059 → 取 0.06（1943 块）。实测：cum=0 双轮零抢占、
+        # 同驻钉 29（= H1 公式 ⌊pool/(ISL+max_tokens)⌋ 预测值）、热轮与 wm=0.03
+        # 打平且更干净。4K 侧 usage 峰值 0.62 永不触闸，零影响。
+        # env VLLM_FL_WATERMARK 可覆盖（=0 恢复上游默认）。
+        # 传递链：platform config → SchedulerConfig.watermark →
+        # KVCacheManager(watermark=)（scheduler.py L266），WAITING/PREEMPTED
+        # 准入路径生效（kv_cache_manager.py L363-386）。
+        _fl_wm = os.environ.get("VLLM_FL_WATERMARK", "0.06")
         if _fl_wm:
             _fl_wm_val = float(_fl_wm)
             if 0.0 <= _fl_wm_val < 1.0:
                 vllm_config.scheduler_config.watermark = _fl_wm_val
-                logger.info(
-                    "FL: VLLM_FL_WATERMARK=%s -> scheduler_config.watermark", _fl_wm
-                )
-            else:
-                logger.warning("FL: VLLM_FL_WATERMARK=%s 越界 [0,1)，忽略", _fl_wm)
 
         if cache_config and cache_config.block_size is None:
             # Ascend NPU requires block_size to be a multiple of 128
