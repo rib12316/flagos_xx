@@ -89,17 +89,25 @@ _PAD_BUF: dict = {}   # K -> zeros[17,K] int8（_int_mm 要求 M>16 的小 M 垫
 
 from vllm.model_executor.layers.linear import UnquantizedLinearMethod  # noqa: E402
 
-try:  # 单 kernel 逐 token 量化（与真实运行时同一 Triton kernel，round-half-even+零行守卫）
-    from vllm_fl.dispatch.backends.flaggems.impl.quantization import (
-        dynamic_per_token_quant_int8_flaggems_triton as act_quant,
-    )
-except Exception:  # pragma: no cover
+try:  # 默认纯 torch 逐 token 量化（标准 CUDA 流，无竞争；实测 libentry Triton 启动器
+      # 在本进程内存在流竞争——b30 读到未就绪输入，见台账 11-07 记录与 debug_batch_m.py）
     from vllm_fl.quantization.w8a8.reference import (
         dynamic_per_token_quant_int8 as _ref_quant,
     )
 
     def act_quant(x2):
         return _ref_quant(x2.contiguous())
+except Exception:  # pragma: no cover
+    act_quant = None
+
+def _act_quant_triton(x2):  # D2_DEBUG=quant=triton 才启用（诊断用）
+    from vllm_fl.dispatch.backends.flaggems.impl.quantization import (
+        dynamic_per_token_quant_int8_flaggems_triton as tq,
+    )
+    return tq(x2)
+
+if _D2_DEBUG.get("quant") == "triton":
+    act_quant = _act_quant_triton
 
 ORIG_APPLY = UnquantizedLinearMethod.apply
 
@@ -143,6 +151,8 @@ from vllm_fl.quantization.w8a8.reference import dynamic_per_token_quant_int8 as 
 
 
 def patched_apply(self, layer, x, bias=None):
+    if _D2_DEBUG.get("sync") == "1":
+        torch.cuda.synchronize()  # 诊断：全同步排除流竞争
     if id(layer) not in STATE["handlers"]:
         return ORIG_APPLY(self, layer, x, bias)
     lid = id(layer)

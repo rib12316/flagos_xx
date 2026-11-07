@@ -1,0 +1,246 @@
+{
+ "records": [
+  {
+   "unique_id": "test/algebra/1035.json",
+   "ref": "3",
+   "pred": "3",
+   "ok": true,
+   "len": 1723,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1098.json",
+   "ref": "6+9i",
+   "pred": "6+9i",
+   "ok": true,
+   "len": 1125,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1275.json",
+   "ref": "\\frac{\\sqrt{3}}{3}",
+   "pred": "\\frac{\\sqrt{3}}{3}",
+   "ok": true,
+   "len": 1699,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1332.json",
+   "ref": "9",
+   "pred": "9",
+   "ok": true,
+   "len": 864,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1457.json",
+   "ref": "-120",
+   "pred": "-120",
+   "ok": true,
+   "len": 971,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1519.json",
+   "ref": "\\frac{\\sqrt{3}}{3}",
+   "pred": "\\frac{\\sqrt{3}}{3}",
+   "ok": true,
+   "len": 658,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1529.json",
+   "ref": "1",
+   "pred": "1",
+   "ok": true,
+   "len": 776,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1547.json",
+   "ref": "6r^2-4r-24",
+   "pred": "6r^2-4r-24",
+   "ok": true,
+   "len": 1373,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1553.json",
+   "ref": "3",
+   "pred": "8",
+   "ok": false,
+   "len": 3072,
+   "truncated": true
+  },
+  {
+   "unique_id": "test/algebra/170.json",
+   "ref": "11",
+   "pred": "11",
+   "ok": true,
+   "len": 1271,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1936.json",
+   "ref": "-1",
+   "pred": "-1",
+   "ok": true,
+   "len": 534,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2023.json",
+   "ref": "1",
+   "pred": "1",
+   "ok": true,
+   "len": 1339,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2036.json",
+   "ref": "3\\sqrt{13}",
+   "pred": "3\\sqrt{13}",
+   "ok": true,
+   "len": 780,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2046.json",
+   "ref": "x^3+3x-6",
+   "pred": "x^3+3x-6",
+   "ok": true,
+   "len": 910,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2080.json",
+   "ref": "14",
+   "pred": "14",
+   "ok": true,
+   "len": 893,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2102.json",
+   "ref": "56",
+   "pred": "56",
+   "ok": true,
+   "len": 905,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2159.json",
+   "ref": "11",
+   "pred": "11",
+   "ok": true,
+   "len": 2813,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/2584.json",
+   "ref": "\\frac{14}{3}",
+   "pred": "\\frac{14}{3}",
+   "ok": true,
+   "len": 837,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/351.json",
+   "ref": "2",
+   "pred": "2",
+   "ok": true,
+   "len": 1214,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/425.json",
+   "ref": "-128",
+   "pred": "-128",
+   "ok": true,
+   "len": 665,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/435.json",
+   "ref": "25",
+   "pred": "25",
+   "ok": true,
+   "len": 589,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/518.json",
+   "ref": "\\frac 34",
+   "pred": "\\frac{3}{4}",
+   "ok": true,
+   "len": 1023,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/634.json",
+   "ref": "4",
+   "pred": "4",
+   "ok": true,
+   "len": 1718,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/661.json",
+   "ref": "36",
+   "pred": "31",
+   "ok": false,
+   "len": 3072,
+   "truncated": true
+  },
+  {
+   "unique_id": "test/algebra/694.json",
+   "ref": "16",
+   "pred": "16",
+   "ok": true,
+   "len": 1515,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/769.json",
+   "ref": "11",
+   "pred": "11",
+   "ok": true,
+   "len": 622,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/counting_and_probability/23957.json",
+   "ref": "210",
+   "pred": "210",
+   "ok": true,
+   "len": 904,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/counting_and_probability/508.json",
+   "ref": "10,\\!080",
+   "pred": "10080",
+   "ok": true,
+   "len": 1282,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/counting_and_probability/71.json",
+   "ref": "3",
+   "pred": "3",
+   "ok": true,
+   "len": 1815,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/counting_and_probability/913.json",
+   "ref": "6",
+   "pred": "6",
+   "ok": true,
+   "len": 3072,
+   "truncated": true
+  }
+ ],
+ "frozen": "9ea59c28f528",
+ "max_tokens": 3072
+}

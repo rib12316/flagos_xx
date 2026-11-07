@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-11-07T21:39:31",
+  "env": {
+    "VLLM_ENABLE_V1_MULTIPROCESSING": "0",
+    "VLLM_PLUGINS": "fl"
+  },
+  "git": "e6f59f9aed090239ebd0ba7ed9b3564976d34c95",
+  "arms": "r_ctrl,r_L0,r_L1a099,r_L2a05,r_L2a06,r_L2a07,r_L2a08",
+  "emu": "int32",
+  "frozen": "9ea59c28f528",
+  "problems": 30,
+  "max_tokens": 3072
+}
