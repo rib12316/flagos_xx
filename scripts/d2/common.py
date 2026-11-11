@@ -213,6 +213,7 @@ def smooth_scale(absmax_per_channel, alpha: float, eps: float = 1e-6):
 
 def load_fold_scales(stats_path: str, alpha: float) -> dict[int, FoldScales]:
     """从激活统计 json 计算逐层 FoldScales。键 = 层号。"""
+    import torch
     with open(stats_path) as f:
         stats = json.load(f)
     layers_in = stats["layers"]
@@ -220,7 +221,6 @@ def load_fold_scales(stats_path: str, alpha: float) -> dict[int, FoldScales]:
     for li in range(NUM_LAYERS):
         def A(suffix, sub=None):
             node = layers_in[f"model.layers.{li}.{suffix}"]
-            import torch
             return torch.tensor(node[sub or "absmax"], dtype=torch.float32)
         scales[li] = FoldScales(
             s_attn=smooth_scale(A("self_attn.qkv_proj"), alpha),
