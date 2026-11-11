@@ -305,6 +305,8 @@ def run_arm(llm, problems, max_tokens: int, seed: int):
             "ok": is_correct(pred, p["answer"]),
             "len": len(o.outputs[0].token_ids),
             "truncated": o.outputs[0].finish_reason == "length",
+            "head": text[:150],
+            "tail": text[-150:],
         })
     return recs, dt
 

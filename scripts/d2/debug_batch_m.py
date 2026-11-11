@@ -33,10 +33,16 @@ PROBE = 24  # 第 24 题（wave1 里 len=2 瞬死的那类）
 def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     problems, _ = load_problems(30)
-    p = problems[PROBE]
-    msgs1 = [build_messages(p["problem"])]
-    msgs30 = [build_messages(p["problem"])] * 30
-    sp = SamplingParams(temperature=0.0, max_tokens=64)
+    mode = os.environ.get("D2_DEBUG_MODE", "identical")
+    if mode == "real30":  # 真实 30 题（错落完成、M 随生成跌破 17 → 垫零路径）
+        msgs1 = [build_messages(problems[PROBE]["problem"])]
+        msgs30 = [build_messages(p["problem"]) for p in problems]
+        max_tok = int(os.environ.get("D2_DEBUG_TOK", "256"))
+    else:
+        msgs1 = [build_messages(problems[PROBE]["problem"])]
+        msgs30 = [build_messages(problems[PROBE]["problem"])] * 30
+        max_tok = 64
+    sp = SamplingParams(temperature=0.0, max_tokens=max_tok)
 
     llm = LLM(model=MODEL_DIR, enforce_eager=True, max_model_len=8192,
               gpu_memory_utilization=0.80, seed=1234)
@@ -45,11 +51,13 @@ def main():
 
     surg.control()
     a = llm.chat(msgs1, sp, use_tqdm=False)[0].outputs[0].text
-    b = llm.chat(msgs30, sp, use_tqdm=False)[0].outputs[0].text
+    b_outs = llm.chat(msgs30, sp, use_tqdm=False)
+    b = b_outs[0].outputs[0].text
 
     surg.arm_surgery(fq.parse_arm_arg("r_L0", None))
     c = llm.chat(msgs1, sp, use_tqdm=False)[0].outputs[0].text
-    d = llm.chat(msgs30, sp, use_tqdm=False)[0].outputs[0].text
+    d_outs = llm.chat(msgs30, sp, use_tqdm=False)
+    d = d_outs[0].outputs[0].text
     surg.control()
 
     def head(t, n=90):
@@ -59,6 +67,27 @@ def main():
     print("C L0   b1 :", head(c))
     print("D L0   b30:", head(d))
     print("A==B:", a == b, "| C==D:", c == d, "| A~C prefix eq:", a[:20] == c[:20])
+
+    if mode == "real30":
+        # 每题首 80 字符 + 与 ctrl 逐题前缀一致长度（找分歧点）
+        import json
+        rows = []
+        for i, (bo, do) in enumerate(zip(b_outs, d_outs)):
+            bt = bo.outputs[0].text
+            dt = do.outputs[0].text
+            k = 0
+            while k < min(len(bt), len(dt)) and bt[k] == dt[k]:
+                k += 1
+            rows.append({"i": i, "id": problems[i]["unique_id"][-12:],
+                         "ctrl_len": len(bt), "q_len": len(dt),
+                         "prefix_eq_chars": k,
+                         "q_head": dt[:70]})
+        with open("/tmp/d2debug_real30.json", "w") as f:
+            json.dump(rows, f, ensure_ascii=False, indent=1)
+        for r in rows[:10]:
+            print(f"[{r['i']:2d}] {r['id']:14s} ctrl={r['ctrl_len']:4d} q={r['q_len']:4d} "
+                  f"diverge@{r['prefix_eq_chars']:4d}  q_head={r['q_head'][:48]!r}")
+        return
 
     # ---- 逐模块数值定位：batch1 vs batch30 行 0 ----
     x1 = None
