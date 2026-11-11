@@ -52,6 +52,16 @@ def _activation_args(
     )
 
 
+def test_packed_scheme_min_capability_admits_sm71():
+    """D2 G2 修复回归：BI-V150 上报 (7,1)，上游 W8A8Int8 门槛 75 会错杀 packed
+    checkpoint；FL kernel（FlagGems Triton int8, int32 累加）无能力门。"""
+    assert packed.CompressedTensorsPackedW8A8Int8.get_min_capability() == 71
+    assert (
+        packed.CompressedTensorsPackedW8A8Int8.get_min_capability()
+        < CompressedTensorsW8A8Int8.get_min_capability()
+    )
+
+
 def test_model_config_maps_packed_channelwise_w8a8():
     assert should_use_packed_w8a8(
         _weight_args(QuantizationStrategy.CHANNEL),
