@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""FlagGems scaled-mm adapter for dynamic-token/per-channel W8A8."""
+"""Dispatched scaled-mm adapter for dynamic-token/per-channel W8A8."""
 
 from __future__ import annotations
 
@@ -32,11 +32,14 @@ from vllm_fl.utils import (
 FLAGGEMS_W8A8_LINEAR_OP = "w8a8_dynamic_per_token_linear"
 
 _dynamic_per_token_quant_int8 = CachedOp("dynamic_per_token_quant_int8")
+_w8a8_scaled_mm = CachedOp(FLAGGEMS_W8A8_LINEAR_OP)
 
 
 class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
-    """Use FlagGems scaled-mm with the vLLM dynamic-W8A8 contract.
+    """Use the dispatched W8A8 scaled-mm with the vLLM dynamic-W8A8 contract.
 
+    The GEMM runs through the ``w8a8_dynamic_per_token_linear`` dispatch op
+    (torch._int_mm impl preferred, FlagGems scaled_mm as ordered fallback).
     Runtime operands are ``A=[M,K] int8``, ``B=[K,N] int8``,
     ``scale_a=[M,1] fp32`` and ``scale_b=[N] fp32``.
     """
@@ -99,13 +102,11 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from flag_gems import scaled_mm
-
         weight, weight_scale, _, _, _ = self._get_layer_params(layer)
         original_shape = x.shape
         x_2d = x.reshape(-1, original_shape[-1]).contiguous()
         x_q, x_scale = _dynamic_per_token_quant_int8(x_2d)
-        output = scaled_mm(
+        output = _w8a8_scaled_mm(
             x_q,
             weight,
             x_scale,

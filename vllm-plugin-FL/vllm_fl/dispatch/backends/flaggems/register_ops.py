@@ -26,6 +26,13 @@ def _bind_is_available(fn, is_available_fn):
     return wrapper
 
 
+def vllm_fl_int_mm_available() -> bool:
+    """Probe torch._int_mm availability (lazy import keeps module import light)."""
+    from vllm_fl.quantization.w8a8.int_mm import int_mm_available
+
+    return int_mm_available()
+
+
 def register_builtins(registry) -> None:
     """
     Register all FlagGems (DEFAULT) operator implementations.
@@ -57,6 +64,33 @@ def register_builtins(registry) -> None:
             kind=BackendImplKind.DEFAULT,
             fn=_bind_is_available(
                 backend.dynamic_per_token_quant_int8_triton,
+                is_avail,
+            ),
+            vendor=None,
+            priority=BackendPriority.DEFAULT,
+        ),
+        # W8A8 dynamic-token linear GEMM. The torch._int_mm impl is the
+        # preferred path on BI-V150 (cuBLAS int8, int32 accumulation); the
+        # FlagGems scaled_mm impl stays registered one priority step lower
+        # as the ordered fallback. _int_mm does not depend on the flag_gems
+        # library, so its availability probe is bound independently.
+        OpImpl(
+            op_name="w8a8_dynamic_per_token_linear",
+            impl_id="default.flagos_intmm",
+            kind=BackendImplKind.DEFAULT,
+            fn=_bind_is_available(
+                backend.w8a8_dynamic_per_token_linear,
+                vllm_fl_int_mm_available,
+            ),
+            vendor=None,
+            priority=BackendPriority.DEFAULT + 10,
+        ),
+        OpImpl(
+            op_name="w8a8_dynamic_per_token_linear",
+            impl_id="default.flagos_scaledmm",
+            kind=BackendImplKind.DEFAULT,
+            fn=_bind_is_available(
+                backend.w8a8_dynamic_per_token_linear_scaledmm,
                 is_avail,
             ),
             vendor=None,

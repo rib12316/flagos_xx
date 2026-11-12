@@ -96,3 +96,29 @@ def dynamic_per_token_quant_int8_flaggems_triton(
             BLOCK_SIZE=block_size,
         )
     return output, scale
+
+
+def w8a8_dynamic_per_token_linear_scaledmm(
+    x_q: torch.Tensor,
+    weight: torch.Tensor,
+    x_scale: torch.Tensor,
+    weight_scale: torch.Tensor,
+    bias: torch.Tensor | None = None,
+    out_dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Run the FlagGems scaled_mm for the W8A8 dynamic-token linear op.
+
+    Signature matches ``vllm_fl.quantization.w8a8.int_mm`` 1:1 so this impl
+    is a pure pass-through of the FlagGems kernel with identical operand
+    semantics (``x_q [M,K] int8``, ``weight [K,N] int8``, scales fp32).
+    """
+    from flag_gems import scaled_mm
+
+    return scaled_mm(
+        x_q,
+        weight,
+        x_scale,
+        weight_scale,
+        bias=bias,
+        out_dtype=out_dtype if out_dtype is not None else torch.bfloat16,
+    )

@@ -74,6 +74,36 @@ class VLLMFLBackendBase(ABC):
         """
         pass
 
+    def w8a8_dynamic_per_token_linear(
+        self,
+        x_q: torch.Tensor,
+        weight: torch.Tensor,
+        x_scale: torch.Tensor,
+        weight_scale: torch.Tensor,
+        bias: Optional[torch.Tensor] = None,
+        out_dtype: Optional[torch.dtype] = None,
+    ) -> torch.Tensor:
+        """Scaled INT8 GEMM for the dynamic-token/per-channel W8A8 path.
+
+        Optional on backends (not abstract) so external backend plugins are
+        not broken; implementations that lack it should leave this base
+        method, which raises.
+
+        Args:
+            x_q: INT8 activations shaped ``[M, K]`` (per-token quantized).
+            weight: INT8 weights in runtime ``[K, N]`` layout, contiguous.
+            x_scale: FP32 per-token scales holding ``M`` values (``[M, 1]``).
+            weight_scale: FP32 per-channel scales holding ``N`` values.
+            bias: Optional ``[N]`` bias added in FP32 before the output cast.
+            out_dtype: Output dtype (defaults to bfloat16).
+
+        Returns:
+            Dequantized output shaped ``[M, N]`` in ``out_dtype``.
+        """
+        raise NotImplementedError(
+            "w8a8_dynamic_per_token_linear is not implemented by this backend"
+        )
+
     # ==================== Activation Operators ====================
 
     @abstractmethod

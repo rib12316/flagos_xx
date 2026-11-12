@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -141,7 +140,7 @@ def test_w8a8_linear_policy_disable_falls_back_to_native_candidate(monkeypatch):
     assert "disabled by policy" in reason
 
 
-def test_w8a8_linear_quantizes_then_calls_flaggems_scaled_mm(monkeypatch):
+def test_w8a8_linear_quantizes_then_calls_dispatched_scaled_mm(monkeypatch):
     calls = []
     x = torch.ones((2, 4), dtype=torch.bfloat16)
     x_q = torch.ones((2, 4), dtype=torch.int8)
@@ -155,14 +154,12 @@ def test_w8a8_linear_quantizes_then_calls_flaggems_scaled_mm(monkeypatch):
         "_dynamic_per_token_quant_int8",
         lambda value: (x_q, x_scale),
     )
-    flag_gems = ModuleType("flag_gems")
 
     def fake_scaled_mm(*args, **kwargs):
         calls.append((args, kwargs))
         return expected
 
-    flag_gems.scaled_mm = fake_scaled_mm
-    monkeypatch.setitem(sys.modules, "flag_gems", flag_gems)
+    monkeypatch.setattr(linear, "_w8a8_scaled_mm", fake_scaled_mm)
 
     kernel = object.__new__(linear.FLW8A8DynamicLinearKernel)
     kernel.layer_param_names = [
@@ -257,7 +254,6 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
         "_dynamic_per_token_quant_int8",
         dynamic_per_token_quant_int8,
     )
-    flag_gems = ModuleType("flag_gems")
 
     def fake_scaled_mm(
         x_q,
@@ -265,8 +261,8 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
         x_scale,
         weight_scale,
         *,
-        bias,
-        out_dtype,
+        bias=None,
+        out_dtype=None,
     ):
         assert x_q.shape == (2, 4)
         assert x_scale.shape == (2, 1)
@@ -278,8 +274,7 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
             output += bias.reshape(1, -1)
         return output.to(out_dtype)
 
-    flag_gems.scaled_mm = fake_scaled_mm
-    monkeypatch.setitem(sys.modules, "flag_gems", flag_gems)
+    monkeypatch.setattr(linear, "_w8a8_scaled_mm", fake_scaled_mm)
 
     actual = kernel.apply_weights(layer, x, bias)
 

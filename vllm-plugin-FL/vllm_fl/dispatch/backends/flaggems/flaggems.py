@@ -59,6 +59,36 @@ class FlagGemsBackend(Backend):
 
         return dynamic_per_token_quant_int8_flaggems_triton(x)
 
+    def w8a8_dynamic_per_token_linear(
+        self,
+        x_q: torch.Tensor,
+        weight: torch.Tensor,
+        x_scale: torch.Tensor,
+        weight_scale: torch.Tensor,
+        bias: Optional[torch.Tensor] = None,
+        out_dtype: Optional[torch.dtype] = None,
+    ) -> torch.Tensor:
+        from vllm_fl.quantization.w8a8.int_mm import int8_scaled_mm_int_mm
+
+        return int8_scaled_mm_int_mm(
+            x_q, weight, x_scale, weight_scale, bias=bias, out_dtype=out_dtype
+        )
+
+    def w8a8_dynamic_per_token_linear_scaledmm(
+        self,
+        x_q: torch.Tensor,
+        weight: torch.Tensor,
+        x_scale: torch.Tensor,
+        weight_scale: torch.Tensor,
+        bias: Optional[torch.Tensor] = None,
+        out_dtype: Optional[torch.dtype] = None,
+    ) -> torch.Tensor:
+        from .impl.quantization import w8a8_dynamic_per_token_linear_scaledmm
+
+        return w8a8_dynamic_per_token_linear_scaledmm(
+            x_q, weight, x_scale, weight_scale, bias=bias, out_dtype=out_dtype
+        )
+
     def silu_and_mul(self, obj, x: torch.Tensor) -> torch.Tensor:
         """
         SiLU activation followed by element-wise multiplication.

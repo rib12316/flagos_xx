@@ -15,6 +15,12 @@
 import pytest
 import torch
 
+from vllm_fl.dispatch import (
+    CachedOp,
+    get_default_manager,
+    reset_default_manager,
+    reset_global_policy,
+)
 from vllm_fl.quantization.w8a8.int_mm import (
     _MIN_ROWS,
     _PAD_BUFS,
@@ -240,3 +246,139 @@ def test_validates_operand_contract():
             x_scale,
             torch.ones(4, dtype=torch.float32),
         )
+
+
+# ==================== dispatch integration ====================
+
+
+@pytest.fixture(autouse=True)
+def _reset_dispatch_state():
+    reset_default_manager()
+    reset_global_policy()
+    yield
+    reset_default_manager()
+    reset_global_policy()
+
+
+@needs_int_mm
+def test_dispatch_resolves_intmm_impl_by_default():
+    manager = get_default_manager()
+
+    impl_id = manager.get_selected_impl_id("w8a8_dynamic_per_token_linear")
+
+    assert impl_id == "default.flagos_intmm"
+
+
+@needs_int_mm
+def test_dispatch_per_op_switch_to_flaggems_scaledmm(monkeypatch):
+    pytest.importorskip("flag_gems")
+    x_q, x_scale, weight, weight_scale, _ = _make_operands(
+        64, 2048, 2560, with_bias=False
+    )
+    via_intmm = int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, out_dtype=torch.bfloat16
+    )
+
+    monkeypatch.setenv(
+        "VLLM_FL_PER_OP",
+        "w8a8_dynamic_per_token_linear=impl:default.flagos_scaledmm",
+    )
+    reset_global_policy()
+    reset_default_manager()
+    manager = get_default_manager()
+
+    assert (
+        manager.get_selected_impl_id("w8a8_dynamic_per_token_linear")
+        == "default.flagos_scaledmm"
+    )
+    via_scaledmm = CachedOp("w8a8_dynamic_per_token_linear")(
+        x_q, weight, x_scale, weight_scale, out_dtype=torch.bfloat16
+    )
+    # Different GEMM backends only need to agree within the int8 noise band.
+    rel = (
+        (via_scaledmm.float() - via_intmm.float()).abs()
+        / via_intmm.float().abs().clamp_min(1e-3)
+    )
+    assert rel.median().item() <= 1e-2
+    assert rel.quantile(0.99).item() <= 5e-2
+
+
+@needs_int_mm
+def test_dispatch_falls_back_to_scaledmm_when_intmm_fails(monkeypatch):
+    pytest.importorskip("flag_gems")
+
+    def broken_int_mm(*_args, **_kwargs):
+        raise RuntimeError("simulated cuBLAS int8 failure")
+
+    x_q, x_scale, weight, weight_scale, _ = _make_operands(
+        64, 2048, 2560, with_bias=False
+    )
+    monkeypatch.setattr(torch, "_int_mm", broken_int_mm)
+
+    out = CachedOp("w8a8_dynamic_per_token_linear")(
+        x_q, weight, x_scale, weight_scale, out_dtype=torch.bfloat16
+    )
+
+    assert out.shape == (64, 2560)
+    assert torch.isfinite(out.float()).all()
+    # The failing impl is marked failed for the process and later calls
+    # keep going through the fallback (VLLM_FL_STRICT=0 default).
+    manager = get_default_manager()
+    assert "default.flagos_intmm" in manager._failed_impls.get(
+        "w8a8_dynamic_per_token_linear", set()
+    )
+    again = CachedOp("w8a8_dynamic_per_token_linear")(
+        x_q, weight, x_scale, weight_scale, out_dtype=torch.bfloat16
+    )
+    assert torch.isfinite(again.float()).all()
+
+
+@needs_int_mm
+def test_apply_weights_end_to_end_through_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
+    from vllm_fl.quantization.w8a8.linear import FLW8A8DynamicLinearKernel
+
+    K, N, M = 2048, 2048, 5
+    gen = torch.Generator().manual_seed(11)
+    x = (torch.randn(1, M, K, generator=gen) * 2).to(torch.bfloat16)
+    weight_fp = torch.randn(N, K, generator=gen) * 0.02
+    weight_scale = (weight_fp.abs().amax(dim=1) / 127).clamp_min(1e-12)
+    checkpoint_weight = (
+        (weight_fp / weight_scale[:, None]).round().clamp(-127, 127).to(torch.int8)
+    )
+    bias = (torch.randn(N, generator=gen) * 0.1).to(torch.bfloat16)
+
+    expected = w8a8_linear_reference(
+        x.reshape(M, K), checkpoint_weight, weight_scale.reshape(-1, 1), bias
+    )
+
+    layer = SimpleNamespace(
+        weight=torch.nn.Parameter(
+            checkpoint_weight.t().contiguous().cuda(), requires_grad=False
+        ),
+        weight_scale=torch.nn.Parameter(
+            weight_scale.to(torch.float32).cuda(), requires_grad=False
+        ),
+        input_scale=None,
+        input_zero_point=None,
+        azp_adj=None,
+    )
+    kernel = object.__new__(FLW8A8DynamicLinearKernel)
+    kernel.layer_param_names = [
+        "weight",
+        "weight_scale",
+        "input_scale",
+        "input_zero_point",
+        "azp_adj",
+    ]
+    monkeypatch.setattr(
+        "vllm_fl.quantization.w8a8.linear._dynamic_per_token_quant_int8",
+        lambda value: dynamic_per_token_quant_int8(value),
+    )
+
+    actual = kernel.apply_weights(layer, x.cuda(), bias.cuda())
+
+    assert actual.shape == (1, M, N)
+    assert actual.dtype == torch.bfloat16
+    assert torch.equal(actual.reshape(M, N).cpu(), expected)
