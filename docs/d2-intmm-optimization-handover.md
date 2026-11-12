@@ -17,8 +17,8 @@
 | 位精确 | 整链与 fake-quant emu **位对齐**（62+22 例单测）：量化 kernel 复刻 torch 标量除法乘倒数语义；epilogue 与 torch 链逐位相等（bias 路径 FMA 1ulp 容差，模型无 bias） |
 | serve | **✅ 能起能跑**：KV 582K tokens（bf16 参照 ~518K），cudagraph FULL_DECODE_ONLY 含 M=16 档捕获通过，日志确认 `flagos_bare` 量化 + `flagos_intmm` GEMM 选中、无 fallback |
 | fake-vs-real | ✅ gate 过：acc_real 0.90 vs fake 0.9333（差 1 题），same_ans 0.90；3 个 diff 全为截断游荡形态（2 题 fake 亦错），非 kernel 缺陷。`results/20261112_d2_fakevsreal/compare.json` |
-| 快速端到端 | **进行中**：`/tmp/d2_quick_e2e.sh`（W8A8 vs bf16 同参 serve + 小场景 [2048,512,16,32]/[512,1024,16,32] 官方 bench），结果 `results/20261112_d2_e2e_quick/`。**接手第一件事：收此结果**（w8a8 arm case1 已出：Total 1279.64 tok/s） |
-| 未完成 | 官方双场景 ≥3 中位（对照 4K 2668.42 / 16K 1276.62）、官方 105 题精度（≥0.955）、耦合验证 + D0 重调、台账回写 |
+| 快速端到端烟测 | **arm1(w8a8) 已完 / arm2(bf16) 进行中**：`/tmp/d2_quick_e2e.sh`（同参 serve + 小场景 [2048,512,16,32]/[512,1024,16,32] 官方 bench 原件换参），结果 `results/20261112_d2_e2e_quick/`。w8a8 case1(prefill 重) 稳态 Total ~1380 tok/s。**接手第一件事：收 bf16 arm 结果出对比**（若未完照脚本 arm2 段补跑） |
+| 验证策略（用户定案） | **烟测循环为常态**：精度只跑冻结 30 题（`scripts/d2/compare_fake_real.py`，acc/same_ans 大致正确即可）；性能只跑快速端到端烟测（同上脚本口径）→ 查瓶颈 → 继续算子优化 → 循环。**官方完整双场景 bench 与官方 105 题精度只在「算子层基本无瓶颈」后最后各走一次**，不做常规验证 |
 
 ---
 
@@ -102,24 +102,55 @@ eager 成对循环在本机：①三算子链每 iter ~200µs host 开销（`ate
 
 - 红线：serve 参数一字不动（`--port 9031 --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}' --served-model-name minicpm --gpu-memory-utilization 0.85 --max-model-len 131072` + `VLLM_PLUGINS=fl`）；官方 bench 脚本原件不改（`vllm-plugin-FL/benchmarks/benchmark_throughput_serve.py`，**换 --test-cases 参数允许**，`run_d2_eval.sh` 的调用样例可抄）；pip 只 `--no-deps --no-build-isolation ./vllm-plugin-FL`；精度配方勿动（SmoothQuant α=0.5，checkpoint `/workspace/MiniCPM5-2B-w8a8`）；GPU 独占串行；≥3 次中位；git 只走 SSH；**11/17 硬止**。
 - 陷阱速查：`pkill -f` 自杀（按精确 pid）；长任务 `setsid nohup` + 早落盘；Bash 单次 ≤10min，长等待轮询（sleep 上限 ~4min 一次）；Bash 工具 **cwd 会重置，命令一律绝对路径**；GitHub https 挂死。
-- 已装 skills：`iluvatar-ixkncli-guide`（kernel profile）/ `iluvatar-ixobjdump-guide`（SASS 验指令）/ `iluvatar-ixrt`（IxRT INT8 官方引擎，384 TOPS 标称靠 ixTE 私有栈）/ `iluvatar-ixsys-guide`。**用户手上另有一份待装 skill 的安装说明（本会话粘贴未遂），接手时向用户索取。**
+- **skills 调研结论（用户已验证，接手直接采用）**：适用的是 Deep-Spark/iluvatar-agent-skills 仓库 4 件——**本机 `~/.claude/skills/` 已全部装好，无需再装**（若需重装：git 走 SSH clone + `bash install.sh` 软链；**npx skills add 走 GitHub https 在本机挂死，禁用**）：
+  - `iluvatar-ixkncli-guide`：kernel profile 规范归因（SOL%/带宽/占用），**每个算子变体必跑**，替代手搓屋顶线；
+  - `iluvatar-ixobjdump-guide`：SASS/IR 查指令——验证 Triton 生成是否真下探 int8 快路径（对上「cutlass 快路径被 sm90 门挡死」类归因）；
+  - `iluvatar-ixsys-guide`：系统级 trace/时间线——serve 端到端跑起来后定位 int8 kernel 真实占比；
+  - `iluvatar-ixrt`：IxRT INT8 路径（吃到算力的官方引擎）——手写融合 GEMM 时抄 tile/向量化策略的第一参考（384 TOPS 需 ixTE 私有栈，torch/Triton 天花板 ~42% 效率已被 bf16 侧印证）。
+  - `iluvatar-cuda-base`（CUDA 兼容差异）：暂不发布但仓内可读（skills 仓库 `/root/iluvatar-agent-skills`），CUDA→Corex 兼容排查时翻。
+  - **Kernel-Smith 不采用**（用户已核实）：独立自动算子生成系统（非 skill 包形态）+ 评测基准在沐曦/MACA 侧；本会话纯天数侧。若日后开沐曦会话可作参考基线。
+  - **待办一次检索**：官方《三 MCP 联动指南》（developer.iluvatar.com，2026-10-22）——若天数栈有官方 MCP（性能优化联用）可能比 skills 更强，开工时检索确认一次获取方式。
 
 ---
 
-## 4. 接手第一件事
+## 4. 接手头三件事
 
+1. **深度调研 4 个已装 skill**（§3 列表；读 `~/.claude/skills/` 下各 skill 的 SKILL.md，
+   跑一遍帮助命令摸熟输出格式）+ 检索一次官方《三 MCP 联动指南》（developer.iluvatar.com，
+   2026-10-22）确认是否有比 skills 更强的官方 MCP 可用——**这是算子开发的方法论地基，
+   最先做**。
+2. 收快速端到端烟测对比（bf16 arm 若未完照 `/tmp/d2_quick_e2e.sh` arm2 段补跑）：
 ```bash
-cd /flagos_比赛/flagos_xx && git log main..feat/d2-w8a8-quant --oneline   # 应见 17 commits
-tail /tmp/d2_quick_e2e_run.log                                            # 快速端到端是否跑完
-cat results/20261112_d2_e2e_quick/bench_w8a8.log                          # W8A8 数字（case1 Total 1279.64 tok/s 已出）
-cat results/20261112_d2_e2e_quick/bench_bf16.log 2>/dev/null              # bf16 对照
-# 若 bf16 arm 未跑完：等或按 /tmp/d2_quick_e2e.sh 的 arm2 段手动补跑（serve 参数照抄）
-# GPU 检查：/usr/local/lib/python3.12/site-packages 是装机目标，改码必 pip install
+cd /flagos_比赛/flagos_xx && git log main..feat/d2-w8a8-quant --oneline   # 应见 17+ commits
+tail /tmp/d2_quick_e2e_run.log
+grep "Total token throughput" results/20261112_d2_e2e_quick/bench_{w8a8,bf16}.log
 ```
+3. 用 `ixsys`/`ixkncli` 对当前 serve（起法照 `/tmp/d2_quick_e2e.sh`）做一次时间线/profile
+   基线，定位 int8 kernel 真实占比——P0/P1 的优先级用数据复核后再开工。
+   （改码必 `pip install --no-deps --no-build-isolation ./vllm-plugin-FL` 才进 bench/serve。）
 
 ---
 
-## 5. 优化空间分析（新 agent 主战场，按 ROI 排序）
+## 5. 开发方法论：skill 驱动的算子开发循环（每个变体都走）
+
+> skills 是知识/命令生成型，不写算子——算子生成本身是 agent 的活；skills 的价值是把
+> profiling/归因/验证从手搓（屋顶线手算、ixsmi 肉眼盯）换成天数官方工具链规范用法。
+> **开工第一步就是深度调研这 4 个 skill 的用法**（读 skill 内容 + 跑一遍帮助命令摸熟），
+> 并检索一次官方《三 MCP 联动指南》（见 §3）。
+
+每个算子变体的标准循环：
+1. **写 kernel**（裸 triton.jit，位精确语义先在单测对拍 oracle 锁死——口径见 §2.2/§1.1）
+2. **ixkncli profile**：`--section` 看 SOL%/带宽/占用，判 memory/compute bound（对照 §2.1 的
+   数字基线）
+3. **ixobjdump 验指令**：SASS 有没有真下探 int8 双发/DP4A 类路径，tile/向量化形态对不对
+4. **graph 口径微基准**（`bench_int8_gemm.py`，D 臂或新臂）过判据
+5. **ixsys 时间线**（端到端阶段）：serve 跑起来后定位 int8 kernel 真实占比，确认优化
+   目标没找错
+6. **烟测**（见 §6 验证策略）→ 瓶颈仍在 → 回 1
+
+---
+
+## 6. 优化空间分析（新 agent 主战场，按 ROI 排序）
 
 > 现状：int8 链 77.9µs（M=64 gate_up）vs 理论下界。结构性浪费按大小排：
 
@@ -135,13 +166,12 @@ bench decode 重场景（16K）可感。**风险低**（GEMV 是最容易写对�
 **P1 — GEMM+epilogue 融合（消 int32 中间往返，prefill 档最大浪费）**
 现路径：`_int_mm` 写 int32 [M,N]（M=1024 gate_up = 50MB）→ epilogue kernel 读回 50MB +
 写 25MB bf16。**~100MB/层往返 ≈ 83µs@1200GB/s 纯浪费**。方向 A：自写融合 GEMM
-（int8 MMA tile + epilogue 在寄存器内完成，直接写 bf16）——要打 cuBLAS 的 59.3µs，
-tile/流水线设计参考 `iluvatar-ixrt` skill 的 INT8 策略 + `iluvatar-ixobjdump` 看
-`gemm_tcu_mr_kernel`（cuBLAS 实际用的 kernel）的 SASS tile 形状。方向 B（更稳）：
-**custom op 里两步变一步的 CUDA Graph 段**已在 decode 生效，prefill eager 侧先用
-`ixkncli` profile 确认 epilogue 占比再决定。量化也可融进 GEMM prologue（读 bf16 x
-一遍完成 absmax→量化→MMA，省 int8 中间写读）——与 P0/P1 同一 kernel 体系，建议
-P0 验证手写 int8 点积效率后再上。
+（int8 MMA tile + epilogue 寄存器内完成直接写 bf16）——要打 cuBLAS 的 59.3µs，先
+ixkncli profile `gemm_tcu_mr_kernel` + ixobjdump 看 SASS tile 形状，**抄 `iluvatar-ixrt`
+skill 的 INT8 tile/向量化策略**（吃到算力的官方参考）。方向 B（更稳）：custom op 内
+两步变一步的 CUDA Graph 段已在 decode 生效；prefill eager 侧先用 ixkncli 确认 epilogue
+占比再决定。量化也可融进 GEMM prologue（读 bf16 x 一遍完成 absmax→量化→MMA，省 int8
+中间写读）——与 P0 同一 kernel 体系，P0 验证手写 int8 点积效率后再上。
 
 **P2 — 现有三个 kernel 的参数调优（半天工作量，确定性收益）**
 - 融合 epilogue：BLOCK 32×256/warps4 固定——M=1024 大形状按 ixkncli 实测调 BLOCK/warps；
@@ -159,16 +189,25 @@ lm_head 现为 bf16（targets 类名匹配不中）。量化它需重转 checkpo
 标称要 ixTE 私有栈（不可用），torch/Triton 天花板 ~42% 效率已被 bf16 侧印证。
 
 **止损线**：任何新 kernel 位精确不过（对拍 oracle 见 §2.2）或 graph 口径无收益即回退；
-11/17 硬止前 2 天（11/15）应冻结算子改动转入端到端收尾。
+11/17 硬止前 2 天（11/15）应冻结算子改动转入收尾。
 
 ---
 
-## 6. 未完成清单（端到端收尾，算子优化外）
+## 7. 验证策略与收尾清单（用户定案）
 
-1. 收快速端到端对比结果（§4）→ 判读 W8A8 vs bf16 端到端加速比
-2. 官方双场景 bench ≥3 次中位：`bash scripts/d2/run_d2_eval.sh`（STAGE=bench/all；对照
-   4K 2668.42 / 16K 1276.62 不回退）
-3. 官方 105 题精度 ≥0.955（STAGE=eval；30 题口径 Δacc=0 + 对拍 0.90/0.9333 在噪声带，
-   105 题 max_tokens=32768 无截断游荡干扰，预期稳）
-4. 耦合验证（[fl.sched] 同驻数）+ D0 重调（`scripts/sweep_attn_launch.py --full`）
-5. 台账回写：`results/d2-kernel-matrix.md` 加 int_mm 行、handover 状态更新、push（SSH）
+**常态 = 烟测循环**（算子优化期间反复走，不跑官方全量）：
+1. 精度烟测：冻结 30 题对拍 `python scripts/d2/compare_fake_real.py`（serve 在 9031 时直跑；
+   acc/same_ans 与 fake（0.9333/基线）大致一致即可，不追位级一致——已知残差来自 serve 栈
+   执行形态，见 §0 对拍记录）
+2. 性能烟测：`/tmp/d2_quick_e2e.sh` 口径（同参 serve 两臂 + 官方 bench 原件换小参
+   `[[2048,512,16,32],[512,1024,16,32]]`），或只跑 w8a8 臂与历史自比 + 关键节点跑双臂
+3. 烟测 → ixsys 时间线/ixkncli 查瓶颈 → 回算子优化循环，直到「基本无瓶颈」
+
+**算子层基本无瓶颈后，最后一次性走官方全量**：
+1. 官方双场景 bench ≥3 次中位：`bash scripts/d2/run_d2_eval.sh`（对照 4K 2668.42 /
+   16K 1276.62 不回退，目标显著超）
+2. 官方 105 题精度 ≥0.955（`STAGE=eval`；30 题口径 Δacc=0 + 对拍在噪声带，105 题
+   max_tokens=32768 无截断游荡干扰，预期稳）
+3. 耦合验证（[fl.sched] 同驻数）+ D0 重调（`scripts/sweep_attn_launch.py --full`）
+4. 台账回写：`results/d2-kernel-matrix.md` 加 int_mm/自研 kernel 行、handover 状态更新、
+   push（SSH）
