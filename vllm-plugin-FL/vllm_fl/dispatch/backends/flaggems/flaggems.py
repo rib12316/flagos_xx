@@ -59,6 +59,14 @@ class FlagGemsBackend(Backend):
 
         return dynamic_per_token_quant_int8_flaggems_triton(x)
 
+    def dynamic_per_token_quant_int8_bare(
+        self,
+        x: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        from .impl.quantization import dynamic_per_token_quant_int8_bare
+
+        return dynamic_per_token_quant_int8_bare(x)
+
     def w8a8_dynamic_per_token_linear(
         self,
         x_q: torch.Tensor,

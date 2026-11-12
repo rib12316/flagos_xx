@@ -21,8 +21,11 @@ chunked-prefill 档）。
 D 臂 vs emu 公式逐位相等。
 屋顶线：M=64 → 权重字节/时间 vs 1200 GB/s（decode 带宽界）；M=1024 → 2MNK/时间
 vs 384 TOPS INT8（bf16 臂对 192 TFLOPS）。
-判据（写入脚本头供台账引用）：任一 M=1024 ≥1.5x 或 M=64 ≥1.2x（D vs A）→ 硬件
-闸门过（B 保留为对照与报警，gate_pass_flaggems_b 另存）。
+判据（写入脚本头供台账引用）：任一 M=1024 ≥1.5x 或 M=64 ≥1.2x（D vs A，**CUDA graph
+重放口径**——两臂同法捕获，消除三算子链 ~200µs/iter 的 host 开销与轮间 drain 后的 GPU
+降频伪影；graph 是 serve decode（FULL_DECODE_ONLY）的真实执行形态，捕获输出与 eager
+逐位对拍保正确性；eager 数字并列保留供对照）→ 硬件闸门过（B 保留为对照与报警，
+gate_pass_flaggems_b 另存）。
 
 GPU 独占门禁：ixsmi 已用显存 ≥3000MiB 即拒绝启动。
 用法：python scripts/d2/bench_int8_gemm.py [--m-extra 8192] [--real-weight-smoke]
@@ -76,6 +79,36 @@ def bench(fn, iters: int, warmup: int = 20) -> float:
         torch.cuda.synchronize()
         rounds.append((time.perf_counter() - t0) / iters * 1e3)  # ms
     return statistics.median(rounds)
+
+
+def graph_bench(fn, iters: int):
+    """CUDA-graph 捕获后按重放计时（两臂同法，消除 host 开销与降频伪影）。
+
+    eager 循环在本机上受两种伪影干扰：①三算子链每 iter ~200µs host 开销
+    （分配/cuBLAS host/launch）；②轮间全量 drain 后 GPU 降频使后续轮劣化
+    2-3×（bf16 单 kernel 不受影响，成对比较失真）。graph 重放计时反映
+    serve decode（FULL_DECODE_ONLY cudagraph）的真实可部署性能。
+    返回 (重放 ms, 捕获输出)。
+    """
+    s = torch.cuda.Stream()
+    s.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(s):
+        for _ in range(3):
+            fn()
+    torch.cuda.current_stream().wait_stream(s)
+    g = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(g):
+        out = fn()
+    torch.cuda.synchronize()
+    rounds = []
+    for _ in range(3):
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        for _ in range(iters):
+            g.replay()
+        torch.cuda.synchronize()
+        rounds.append((time.perf_counter() - t0) / iters * 1e3)
+    return statistics.median(rounds), out
 
 
 def main():
@@ -156,6 +189,21 @@ def main():
         for M in ms:
             xm = x[:M].contiguous()
             iters = args.iters_small if M <= 128 else args.iters_large
+            # graph 模式（gate 口径）：A/D 两臂同法捕获重放，消 host 开销与
+            # 轮间降频伪影；捕获输出与 eager 输出对拍保正确性
+            t_a_g, y_a_g = graph_bench(
+                lambda: torch.nn.functional.linear(xm, W), iters)
+            def d_pair():
+                q, s = _quant(xm)
+                return _mm_op(q, w8, s, ws, out_dtype=torch.bfloat16)
+            t_d_g, y_d_g = graph_bench(d_pair, iters)
+            assert torch.equal(y_a_g, torch.nn.functional.linear(xm, W)), \
+                "graph 捕获 bf16 输出与 eager 不一致"
+            y_d_eager = d_pair()
+            assert torch.equal(y_d_g, y_d_eager), \
+                "graph 捕获 int_mm 输出与 eager 不一致"
+            ratio_d = t_a_g / t_d_g
+            # eager 数字并列保留（口径对照）
             t_a = bench(lambda: torch.nn.functional.linear(xm, W), iters)
             xq, xs = _quant(xm)  # 预热 + 供 mm-only 臂复用同批量化输入
             # B 主计时 = quant+mm 成对（真实一层代价）
@@ -168,20 +216,17 @@ def main():
                 q, s = _quant(xm)
                 return (q.to(torch.bfloat16) @ w8.to(torch.bfloat16)) * s * ws
             t_c = bench(c_falsify, iters)
-            # D 臂 = 接线后的真实调度路径（与 B 同一 CachedOp 量化实例）
-            def d_pair():
-                q, s = _quant(xm)
-                return _mm_op(q, w8, s, ws, out_dtype=torch.bfloat16)
             t_d = bench(d_pair, iters)
             t_d_mm = bench(
                 lambda: _mm_op(xq, w8, xs, ws, out_dtype=torch.bfloat16), iters)
             ratio = t_a / t_b
-            ratio_d = t_a / t_d
             flops = 2 * M * N * K
-            row = dict(shape=f"{K}x{N}", tag=tag, M=M, t_bf16_ms=t_a, t_int8_pair_ms=t_b,
+            row = dict(shape=f"{K}x{N}", tag=tag, M=M,
+                       t_bf16_graph_ms=t_a_g, t_intmm_graph_ms=t_d_g,
+                       ratio_graph=ratio_d,
+                       t_bf16_ms=t_a, t_int8_pair_ms=t_b,
                        t_int8_mmonly_ms=t_b_mm, t_falsify_ms=t_c, ratio_vs_bf16=ratio,
                        t_intmm_pair_ms=t_d, t_intmm_mmonly_ms=t_d_mm,
-                       ratio_intmm_vs_bf16=ratio_d,
                        speedup_intmm_vs_flaggems=t_b / t_d,
                        intmm_bw_GBs=K * N / (t_d_mm / 1e3) / 1e9,
                        intmm_tops=flops / (t_d_mm / 1e3) / 1e12,
@@ -193,7 +238,7 @@ def main():
                                            for k, v in row.items()}))
             if (M == 1024 and ratio_d >= 1.5) or (M == 64 and ratio_d >= 1.2):
                 gate_ok = True
-            if (M == 1024 and ratio >= 1.5) or (M == 64 and ratio >= 1.2):
+            if (M == 1024 and t_a / t_b >= 1.5) or (M == 64 and t_a / t_b >= 1.2):
                 gate_ok_flaggems_b = True
             if t_c < t_b:
                 print(f"!! 证伪臂 C ({t_c:.3f}ms) 赢了 int8 臂 B ({t_b:.3f}ms) @ {tag} M={M}")
@@ -205,12 +250,12 @@ def main():
     with open(f"{args.out_dir}/bench.json", "w") as f:
         json.dump({"rows": rows, "gate_pass": gate_ok,
                    "gate_pass_flaggems_b": gate_ok_flaggems_b,
-                   "gate_arm": "D_intmm_paired_vs_bf16",
+                   "gate_arm": "D_intmm_graph_vs_bf16_graph",
                    "dispatch_impl": linear_impl,
                    "roofline": {"HBM_GBPS": HBM_GBPS, "INT8_TOPS": INT8_TOPS}}, f,
                   indent=1)
-    best_1024 = max((r["ratio_intmm_vs_bf16"] for r in rows if r["M"] == 1024), default=0)
-    best_64 = max((r["ratio_intmm_vs_bf16"] for r in rows if r["M"] == 64), default=0)
+    best_1024 = max((r["ratio_graph"] for r in rows if r["M"] == 1024), default=0)
+    best_64 = max((r["ratio_graph"] for r in rows if r["M"] == 64), default=0)
     best_b_1024 = max((r["ratio_vs_bf16"] for r in rows if r["M"] == 1024), default=0)
     print(result_line(stage="gate", pass_=str(gate_ok).lower(),
                       best_intmm_M1024=f"{best_1024:.2f}",

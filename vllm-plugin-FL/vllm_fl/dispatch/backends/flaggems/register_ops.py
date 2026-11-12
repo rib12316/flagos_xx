@@ -33,6 +33,22 @@ def vllm_fl_int_mm_available() -> bool:
     return int_mm_available()
 
 
+def _flaggems_vllm_available() -> bool:
+    """Probe the optional external flaggems_vllm package.
+
+    Without this probe an absent package is only discovered at call time:
+    the CachedOp fast path then raises, marks the impl failed and drops to
+    the OpManager.call slow path on EVERY subsequent invocation (~0.6ms
+    overhead each). Probing at resolution time skips it upfront.
+    """
+    try:
+        import flaggems_vllm  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def register_builtins(registry) -> None:
     """
     Register all FlagGems (DEFAULT) operator implementations.
@@ -53,7 +69,7 @@ def register_builtins(registry) -> None:
             kind=BackendImplKind.DEFAULT,
             fn=_bind_is_available(
                 backend.dynamic_per_token_quant_int8,
-                is_avail,
+                _flaggems_vllm_available,
             ),
             vendor=None,
             priority=BackendPriority.DEFAULT + 10,
@@ -68,6 +84,23 @@ def register_builtins(registry) -> None:
             ),
             vendor=None,
             priority=BackendPriority.DEFAULT,
+        ),
+        # Bare-launch variant of the same Triton kernel: no libentry wrapper,
+        # so no launch-cache/event-timing overhead and no stream race. This
+        # backend's libentry kernel measured ~0.9ms/call when interleaved
+        # with GEMM launches on BI-V150; the bare launch is ~30us. Highest
+        # priority (bit-exact against the torch reference, asserted by tests)
+        # so the hot path never depends on the optional external package.
+        OpImpl(
+            op_name="dynamic_per_token_quant_int8",
+            impl_id="default.flagos_bare",
+            kind=BackendImplKind.DEFAULT,
+            fn=_bind_is_available(
+                backend.dynamic_per_token_quant_int8_bare,
+                is_avail,
+            ),
+            vendor=None,
+            priority=BackendPriority.DEFAULT + 15,
         ),
         # W8A8 dynamic-token linear GEMM. The torch._int_mm impl is the
         # preferred path on BI-V150 (cuBLAS int8, int32 accumulation); the

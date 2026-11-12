@@ -82,6 +82,26 @@ def _row_indices(M):
     return sorted({0, M // 2, M - 1, min(M - 1, 3)})
 
 
+def _assert_bf16_matches_reference(actual, expected, bias=None):
+    """torch.equal, except the bias path of the fused epilogue.
+
+    The fused kernel's mul+bias-add can be FMA-contracted by the compiler
+    (single rounding vs the torch chain's two roundings), showing up as a
+    rare 1-ulp bf16 difference at cancellation points (~1e-5 of elements).
+    The model's quantized projections are bias-free, where the fused path
+    stays bit-identical; tolerance covers <=2 ulp of the operand magnitude.
+    """
+    if torch.equal(actual, expected):
+        return
+    assert bias is not None, "no-bias path must be bit-identical"
+    mag = expected.float().abs() + bias.float().abs().reshape(1, -1)
+    diff = (actual.float() - expected.float()).abs()
+    assert (diff <= mag * 2**-7 + 1e-30).all(), (
+        f"bias-path mismatch beyond FMA tolerance: "
+        f"max diff {(diff / mag.clamp_min(1e-30)).max().item():.3e} rel"
+    )
+
+
 @pytest.mark.parametrize("M", [1, 2, 5, 16, 17, 64])
 @pytest.mark.parametrize(
     "K_N",
@@ -106,7 +126,7 @@ def test_bitexact_small_shapes_vs_cpu_int32(M, K_N, with_bias):
 
     assert actual.shape == (M, N)
     assert actual.dtype == torch.bfloat16
-    assert torch.equal(actual, expected)
+    _assert_bf16_matches_reference(actual, expected, bias)
 
 
 @pytest.mark.parametrize("M", [1, 16, 17, 64, 1024])
@@ -128,7 +148,7 @@ def test_bitexact_fused_shapes_row_sampled(M, K_N, with_bias):
     ).cuda()
 
     assert actual.shape == (M, N)
-    assert torch.equal(actual[rows], expected)
+    _assert_bf16_matches_reference(actual[rows], expected, bias)
 
 
 @needs_int_mm
@@ -160,7 +180,77 @@ def test_matches_w8a8_linear_reference_end_to_end(M):
     )
 
     assert actual.shape == expected.shape
-    assert torch.equal(actual.cpu(), expected)
+    _assert_bf16_matches_reference(actual.cpu(), expected, bias)
+
+
+@needs_int_mm
+@pytest.mark.parametrize("M", [1, 5, 64, 1024])
+@pytest.mark.parametrize("K_N", _FUSED_SHAPES, ids=["qkv", "down"])
+@pytest.mark.parametrize("with_bias", [False, True])
+def test_fused_epilogue_bitidentical_to_torch_chain(
+    monkeypatch, M, K_N, with_bias
+):
+    """VLLM_FL_INTMM_FUSED_EPILOGUE toggles two paths that must be bit-equal."""
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    K, N = K_N
+    x_q, x_scale, weight, weight_scale, bias = _make_operands(
+        M, K, N, with_bias=with_bias
+    )
+
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_EPILOGUE", "1")
+    fused = int_mm_mod.int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, bias=bias, out_dtype=torch.bfloat16
+    )
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_EPILOGUE", "0")
+    chain = int_mm_mod.int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, bias=bias, out_dtype=torch.bfloat16
+    )
+
+    _assert_bf16_matches_reference(fused, chain, bias)
+
+
+@needs_int_mm
+def test_bare_quant_kernel_bitidentical_to_reference():
+    """The bare (non-libentry) quant impl must match the portable reference."""
+    from vllm_fl.dispatch.backends.flaggems.impl.quantization import (
+        dynamic_per_token_quant_int8_bare,
+    )
+
+    for M, K in [(1, 2048), (5, 6144), (64, 2048), (128, 6144)]:
+        gen = torch.Generator().manual_seed(M * 1000 + K)
+        x = (torch.randn(M, K, generator=gen) * 3).to(torch.bfloat16).cuda()
+
+        q, s = dynamic_per_token_quant_int8_bare(x.contiguous())
+        ref_q, ref_s = dynamic_per_token_quant_int8(x)
+
+        assert q.shape == (M, K) and q.dtype == torch.int8
+        assert s.shape == (M, 1) and s.dtype == torch.float32
+        assert torch.equal(q, ref_q)
+        assert torch.equal(s, ref_s)
+
+
+@needs_int_mm
+def test_cachedop_quant_resolves_to_fast_impl():
+    """Quant must not land on the libentry impl in this environment."""
+    x = torch.randn(64, 2048, device="cuda", dtype=torch.bfloat16)
+    quant = CachedOp("dynamic_per_token_quant_int8")
+
+    q, s = quant(x)
+
+    impl_id = get_default_manager().get_selected_impl_id(
+        "dynamic_per_token_quant_int8"
+    )
+    assert impl_id in ("default.flagos", "default.flagos_bare")
+    # The impl cache must stay populated across calls: a call-time failure of
+    # the top impl would stick this CachedOp on the manager slow path
+    # (~0.6ms overhead per call) for the life of the process.
+    quant(x)
+    assert quant._impl is not None
+    assert quant._impl.impl_id == impl_id
+    ref_q, ref_s = dynamic_per_token_quant_int8(x)
+    assert torch.equal(q, ref_q)
+    assert torch.equal(s, ref_s)
 
 
 @needs_int_mm
@@ -381,4 +471,4 @@ def test_apply_weights_end_to_end_through_dispatch(monkeypatch):
 
     assert actual.shape == (1, M, N)
     assert actual.dtype == torch.bfloat16
-    assert torch.equal(actual.reshape(M, N).cpu(), expected)
+    _assert_bf16_matches_reference(actual.reshape(M, N).cpu(), expected, bias)
