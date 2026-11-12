@@ -109,16 +109,18 @@ eager 成对循环在本机：①三算子链每 iter ~200µs host 开销（`ate
   - `iluvatar-ixrt`：IxRT INT8 路径（吃到算力的官方引擎）——手写融合 GEMM 时抄 tile/向量化策略的第一参考（384 TOPS 需 ixTE 私有栈，torch/Triton 天花板 ~42% 效率已被 bf16 侧印证）。
   - `iluvatar-cuda-base`（CUDA 兼容差异）：暂不发布但仓内可读（skills 仓库 `/root/iluvatar-agent-skills`），CUDA→Corex 兼容排查时翻。
   - **Kernel-Smith 不采用**（用户已核实）：独立自动算子生成系统（非 skill 包形态）+ 评测基准在沐曦/MACA 侧；本会话纯天数侧。若日后开沐曦会话可作参考基线。
-  - **待办一次检索**：官方《三 MCP 联动指南》（developer.iluvatar.com，2026-10-22）——若天数栈有官方 MCP（性能优化联用）可能比 skills 更强，开工时检索确认一次获取方式。
+- **skill 调研是开放任务（用户明确要求，不限于以上 4 件）**：开工时**联网搜索有没有更适合/更好的算子开发 skill**——方向包括但不限于：Triton kernel 开发/调优类 Claude Code skill、CUDA/GPU kernel 优化 skill、LLM 推理/量化算子类 skill、官方 anthropics/skills 仓库、社区 skill 市场（如 skills.sh）与 awesome-claude-skills 列表、KernelBench 类基准的 skill 化封装等。评估标准：①与天数 corex/Triton 栈对位（非 NVIDIA-only 语义）；②是能装进 Claude Code 的 skill 包形态（非独立智能体系统，Kernel-Smith 即因此出局）；③本机可安装（**git 走 SSH clone，npx/https 会挂死**）。已装 4 件是基线不是上限——发现更对位的就装上用，并把结论写进台账。
+- **一并检索**：官方《三 MCP 联动指南》（developer.iluvatar.com，2026-10-22）——若天数栈有官方 MCP（性能优化联用）可能比 skills 更强，确认获取方式。
 
 ---
 
 ## 4. 接手头三件事
 
-1. **深度调研 4 个已装 skill**（§3 列表；读 `~/.claude/skills/` 下各 skill 的 SKILL.md，
-   跑一遍帮助命令摸熟输出格式）+ 检索一次官方《三 MCP 联动指南》（developer.iluvatar.com，
-   2026-10-22）确认是否有比 skills 更强的官方 MCP 可用——**这是算子开发的方法论地基，
-   最先做**。
+1. **深度调研 skill（开放任务，最先做）**：①读熟已装 4 件（§3 列表，`~/.claude/skills/`
+   各 SKILL.md + 跑帮助命令）；②**联网搜索更适合/更好的算子开发 skill**（方向与评估标准
+   见 §3——Triton/CUDA/GPU 优化类 skill 包、skill 市场、KernelBench 类封装，发现即装即用
+   并记台账）；③检索官方《三 MCP 联动指南》（developer.iluvatar.com，2026-10-22）确认
+   有无更强的官方 MCP——**这是算子开发的方法论地基**。
 2. 收快速端到端烟测对比（bf16 arm 若未完照 `/tmp/d2_quick_e2e.sh` arm2 段补跑）：
 ```bash
 cd /flagos_比赛/flagos_xx && git log main..feat/d2-w8a8-quant --oneline   # 应见 17+ commits
