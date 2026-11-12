@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-11-11T19:09:54",
+  "timestamp": "2026-11-12T08:39:55",
   "env": {
     "VLLM_ENABLE_V1_MULTIPROCESSING": "0",
     "VLLM_PLUGINS": "fl"
   },
-  "git": "6366cb587dac577ae5acd5d2e369719f7fc331b5",
-  "arms": "r_L0",
+  "git": "c61d32532af681fb8b482b93eff43d4470be5c72",
+  "arms": "r_L2a03:smooth=0.3,r_L2a04:smooth=0.4,r_l2a05_mlp:smooth=0.5,keep=attn,r_l2a05_fl2:smooth=0.5,keep=first_last:2",
   "emu": "int32",
   "frozen": "9ea59c28f528",
   "problems": 30,
