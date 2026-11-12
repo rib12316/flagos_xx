@@ -136,26 +136,32 @@ def main() -> int:
     clip_table: dict[str, float] = {}
     for li in range(NUM_LAYERS):
         p = f"model.layers.{li}"
-        sep = {n: tensors[f"{p}.{n}.weight"] for n in
-               ("self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj",
-                "self_attn.o_proj", "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj")}
+        # 短键约定与 common.apply_folds_separate 一致
+        sep = {f"{n}.weight": tensors[f"{p}.{pre}.{n}.weight"] for pre, n in (
+            ("self_attn", "q_proj"), ("self_attn", "k_proj"), ("self_attn", "v_proj"),
+            ("self_attn", "o_proj"), ("mlp", "gate_proj"), ("mlp", "up_proj"),
+            ("mlp", "down_proj"))}
+        sep["input_layernorm.weight"] = tensors[f"{p}.input_layernorm.weight"]
+        sep["post_attention_layernorm.weight"] = tensors[f"{p}.post_attention_layernorm.weight"]
         quant = layer_quant_flags(args.keep, li)
         # 折叠（消费 keep-list 站点跳过其列折叠；v/up 行折叠在 keep 层同样应用——精确数学）
         folded = apply_folds_separate(
-            {**sep,
-             "input_layernorm.weight": tensors[f"{p}.input_layernorm.weight"],
-             "post_attention_layernorm.weight": tensors[f"{p}.post_attention_layernorm.weight"]},
-            li, folds_all[li] if folds_all is not None else None, quant)
+            sep, li, folds_all[li] if folds_all is not None else None, quant)
         # norm 张量（可能已折）
         out[f"{p}.input_layernorm.weight"] = folded["input_layernorm.weight"]
         out[f"{p}.post_attention_layernorm.weight"] = folded["post_attention_layernorm.weight"]
-        site_of_sep = {"self_attn.q_proj": "qkv", "self_attn.k_proj": "qkv",
-                       "self_attn.v_proj": "qkv", "self_attn.o_proj": "o",
-                       "mlp.gate_proj": "gate_up", "mlp.up_proj": "gate_up",
-                       "mlp.down_proj": "down"}
+        site_of_sep = {"q_proj": "qkv", "k_proj": "qkv", "v_proj": "qkv",
+                       "o_proj": "o", "gate_proj": "gate_up", "up_proj": "gate_up",
+                       "down_proj": "down"}
+        pre_of = {"q_proj": "self_attn", "k_proj": "self_attn", "v_proj": "self_attn",
+                  "o_proj": "self_attn", "gate_proj": "mlp", "up_proj": "mlp",
+                  "down_proj": "mlp"}
         for name, W in sep.items():
-            key = f"{p}.{name}.weight"
-            if not quant[site_of_sep[name]]:
+            short = name[: -len(".weight")]  # q_proj / k_proj / ...
+            if short in ("input_layernorm", "post_attention_layernorm"):
+                continue  # norm 已处理
+            key = f"{p}.{pre_of[short]}.{name}"
+            if not quant[site_of_sep[short]]:
                 out[key] = folded[name].to(torch.bfloat16)  # keep：保 bf16（可能含行折叠）
                 continue
             Wq = folded[name].to(torch.float32)
@@ -224,7 +230,9 @@ def self_check(dst: str, shard: str, expect_packed: int, clip_table: dict) -> in
         assert t[f"{base}_scale"].shape == (shape[1], 1), f"scale 形状 {k}"
     print(f"RESULT|check=roundtrip|tensors={len(packed)}|bit_exact=True")
 
-    # 2) 数值抽样（CPU int32 参考 vs bf16 反量化线性）≤1e-2
+    # 2) 数值抽样（CPU）：两侧同量化激活，验证 packed 权重忠实实现 W8A8 语义 ≤1e-2
+    #    y_ref = int32 精确累加参考；y_dq = 反量化 bf16 线性（bf16 舍入 + fp32 累加差）
+    from vllm_fl.quantization.w8a8.reference import dynamic_per_token_quant_int8
     import random
     keys = random.Random(0).sample(sorted(packed), 5)
     worst = 0.0
@@ -236,7 +244,9 @@ def self_check(dst: str, shard: str, expect_packed: int, clip_table: dict) -> in
         w_dq = (wq.to(torch.float32) * ws[:, None]).to(torch.bfloat16)
         x = (torch.randn(64, K) * 2).to(torch.bfloat16)
         y_ref = w8a8_linear_reference(x, wq, ws)          # CPU：int32 精确累加
-        y_dq = torch.nn.functional.linear(x, w_dq)        # 反量化 bf16 线性
+        xq, xs = dynamic_per_token_quant_int8(x)
+        x_dq = (xq.to(torch.float32) * xs).to(torch.bfloat16)
+        y_dq = torch.nn.functional.linear(x_dq, w_dq)     # 同量化激活 + 反量化权重
         err = (y_ref.float() - y_dq.float()).abs().max().item()
         worst = max(worst, err)
         assert err <= 1e-2, f"数值对拍超限 {k}: {err:.3e}"

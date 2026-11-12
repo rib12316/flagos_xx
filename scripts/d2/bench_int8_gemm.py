@@ -106,9 +106,13 @@ def main():
     y = scaled_mm(xq, w8, xs, ws, out_dtype=torch.bfloat16)
     assert torch.isfinite(y.float()).all(), "冒烟失败：输出非有限"
     y_ref = (xq.float() @ wq.float().t()) * xs * ws
-    smoke_err = (y.float() - y_ref).abs().max().item()
-    assert smoke_err <= 1e-2, f"冒烟失败：scaled_mm vs 参考 {smoke_err:.3e} > 1e-2"
-    print(result_line(stage="smoke", compiled=True, finite=True, max_err=f"{smoke_err:.2e}"))
+    # 相对误差判据（bf16 输出舍入 ulp≈0.4%，绝对阈值会被值域误伤）
+    rel = ((y.float() - y_ref).abs() / y_ref.abs().clamp_min(1e-3))
+    med, p99 = rel.median().item(), rel.quantile(0.99).item()
+    assert med <= 0.01 and p99 <= 0.05, \
+        f"冒烟失败：scaled_mm vs 参考 median {med:.3e} / p99 {p99:.3e}"
+    print(result_line(stage="smoke", compiled=True, finite=True,
+                      rel_median=f"{med:.2e}", rel_p99=f"{p99:.2e}"))
 
     if args.real_weight_smoke:
         real_weight_smoke(dev, _quant, scaled_mm)
