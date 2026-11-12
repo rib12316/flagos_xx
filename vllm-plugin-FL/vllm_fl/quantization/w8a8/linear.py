@@ -127,6 +127,16 @@ def register_fl_w8a8_linear_kernel(registry: dict) -> bool:
     candidates = registry.setdefault(PlatformEnum.OOT, [])
     if FLW8A8DynamicLinearKernel not in candidates:
         candidates.insert(0, FLW8A8DynamicLinearKernel)
+
+    # Warm the W8A8 dispatch ops before vLLM's AOT fullgraph capture: a
+    # first-time resolve inside torch.compile would enter locks dynamo
+    # cannot trace (EngineCore startup failure). Runs at quant registration,
+    # well before the first forward.
+    try:
+        _dynamic_per_token_quant_int8.pre_resolve()
+        _w8a8_scaled_mm.pre_resolve()
+    except Exception:  # pragma: no cover - never block kernel registration
+        pass
     return True
 
 

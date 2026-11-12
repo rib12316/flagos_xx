@@ -182,6 +182,24 @@ class CachedOp:
         self._manager_epoch = -1
         self._policy_epoch = -1
 
+    def pre_resolve(self) -> str:
+        """Resolve and cache this op's impl without invoking it.
+
+        vLLM AOT-compiles the model forward with fullgraph dynamo; a
+        first-time resolve inside capture enters locks dynamo cannot trace
+        (EngineCore startup failure). Pre-resolving at registration time
+        lets the captured fast path stay entirely lock-free.
+        """
+        mgr = get_default_manager()
+        impl = mgr._resolve_impl(self._op_name)
+        mgr._record_first_use(self._op_name, impl)
+        self._impl = impl
+        self._use_manager_call = False
+        self._manager_id = id(mgr)
+        self._manager_epoch = mgr.policy_epoch
+        self._policy_epoch = get_policy_epoch()
+        return impl.impl_id
+
     def __call__(self, *args, **kwargs):
         mgr = get_default_manager()
 

@@ -254,6 +254,31 @@ def test_cachedop_quant_resolves_to_fast_impl():
 
 
 @needs_int_mm
+def test_pre_resolved_ops_survive_fullgraph_compile():
+    """vLLM AOT-compiles the model forward; an un-resolved CachedOp inside
+    dynamo enters locks it cannot trace (EngineCore startup failure on the
+    W8A8 path). The serve invariant: pre_resolve() at registration time
+    makes the whole chain fullgraph-traceable."""
+    quant = CachedOp("dynamic_per_token_quant_int8")
+    mm = CachedOp("w8a8_dynamic_per_token_linear")
+    assert quant.pre_resolve() == "default.flagos_bare"
+    assert mm.pre_resolve() == "default.flagos_intmm"
+
+    x = torch.randn(4, 64, device="cuda", dtype=torch.bfloat16)
+    w8 = torch.randint(-127, 128, (64, 32), device="cuda", dtype=torch.int8)
+    ws = torch.rand(32, device="cuda")
+
+    def fn(x):
+        q, s = quant(x)
+        return mm(q, w8, s, ws, out_dtype=torch.bfloat16)
+
+    compiled = torch.compile(fn, fullgraph=True, dynamic=False)
+    out = compiled(x)
+    assert out.shape == (4, 32)
+    assert torch.equal(out, fn(x))
+
+
+@needs_int_mm
 def test_output_dtype_and_default():
     x_q, x_scale, weight, weight_scale, _ = _make_operands(
         5, 2048, 2560, with_bias=False
