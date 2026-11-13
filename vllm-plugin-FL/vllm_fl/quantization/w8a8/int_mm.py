@@ -309,6 +309,12 @@ if _HAS_TRITON:
         if M < _FUSED_GEMM_MIN_M:
             return None
         even_m = M % cfg[0] == 0
+        if not even_m:
+            # Odd-M chunk tails keep the cuBLAS chain: the masked fused path
+            # pays 3-6x predication on this backend. Official bench inputs
+            # (4096/16384) divide the 2048 token budget exactly, so tails are
+            # rare; the masked kernel branch stays for generality.
+            return None
         # Triton JIT compiles with device-side syncs — illegal inside a CUDA
         # graph capture. vLLM's dummy forward (M=2048) warms the even-M
         # specialization of each (K, N); anything else inside a capture

@@ -1,5 +1,37 @@
 # 2026-11-13 D2 算子深挖阶段台账（prefill 优先线）
 
+## 0. 本日终章：融合 GEMM+epilogue 落地（commit 6dfe8fd + 961cac7）
+
+**融合 kernel（`_w8a8_fused_gemm_kernel`，int_mm.py）端到端收益矩阵**：
+
+| 口径 | 数字 |
+|---|---|
+| bench eager（prefill 部署真值）M=2048 每层 3 融合线性 | **1.78×**（6.22→3.49ms：gate_up 2.50× / o 2.16× / qkv 1.89×；down 走链不回退） |
+| bench graph M=2048 | gate_up 3.01× / o 1.21× / qkv 1.18× / down 走链 |
+| serve 烟测 case1 [2048,512,16,32] 冷启 | **1415.16 → 2939.72 tok/s（2.08×）**；混合态 pass 971-1280 → 2485-2576 |
+| serve 烟测 case2 [512,1024,16,32]（decode 重） | 1365.52 vs 原 1372.36 持平（M<256 恒走链，decode 零回退） |
+| 精度 30 题对拍 | **acc_real 0.9333 = fake 基线**（原链 0.90），same_ans 0.90，gate 过 |
+| serve fallback | 0 次 |
+
+路由定案：仅 (2048,12288)/(2048,2560)/(2048,2048) 且 M≥256 且 M%BLOCK_M==0 走融合；
+其余（M<256 decode graph 档 / down 全档 / 非整除尾 chunk）走 cuBLAS 链。
+迭代教训两则：① `do_not_specialize=["M"]` + 恒真掩码 → 谓词化 load/store 实测劣化
+3-6×，EVEN_M constexpr 显式双分支解决；② M=64/128 融合 grid 饥饿（10-20 program/
+16 SM），M<256 回落链后 decode graph 档零扰动。
+
+**ixkncli 归因（六步循环第 2-3 步）**：Multi-Lane Matrix Instructions 6.29M——int8
+tl.dot 确实下探矩阵指令路径；grid 768×512thr，109 vec regs，49KB smem/block，**理论
+占用 12.5% 瓶颈 = 共享内存**（2 CTA/CU 上限）——与 cuBLAS（110-125 T-MAC/s）的差距
+主因，后续调参方向 = 减小 BK/BN 降 smem 提 CTA 数（当前 68-74 T-MAC/s 已够赢 eager）。
+ixobjdump 步省略（指令统计已证实矩阵路径）。
+
+遗留优化空间（明日按 ROI）：
+1. qkv/o 试 BM256（gate_up 靠它 18%→62%；qkv/o 权重 4-5MB 可全驻 L2，预期增益小）
+2. down 深挖（BK=128/GROUP_M/cache_modifier .cg）或接受 cuBLAS
+3. 官方双场景 bench ≥3 中位 + 105 题精度（Step 5 收尾，冻结线 11/15 前）
+
+
+
 ## 1. 快速端到端烟测对比（两臂收齐，本阶段方向定盘数据）
 
 `/tmp/d2_quick_e2e.sh` 口径：同参 serve（红线参数）+ 官方 bench 原件换小参 `[[2048,512,16,32],[512,1024,16,32]]`。
