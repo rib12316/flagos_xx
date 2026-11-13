@@ -177,16 +177,17 @@ if _HAS_TRITON:
 # writing bf16 exactly once. For M >= _MIN_ROWS it replaces the
 # ``_int_mm`` + epilogue pair; every other shape keeps the cuBLAS chain.
 _FUSED_GEMM_CONFIGS = {
-    # (K, N) -> (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages)
-    # Phase-0 probe bests: gate_up wants BLOCK_M=256 (25MB weight tile reuse
-    # concentrates L2 pressure); qkv/o peak at (128, 256). down (6144, 2048)
-    # stays on the cuBLAS chain on purpose: its cuBLAS GEMM runs ~125
-    # T-MAC/s and the best Triton tile only reaches ~59% of that, so the
-    # epilogue saving does not pay back at the serve chunk size (M=2048
-    # eager 0.85x; graph 0.81x) — routing it fused would regress prefill.
-    (2048, 12288): (256, 128, 64, 8, 2),
-    (2048, 2560): (128, 256, 64, 8, 2),
-    (2048, 2048): (128, 256, 64, 8, 2),
+    # (K, N) -> (BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages)
+    # phase0c production-kernel sweep (2026-11-13): (256,256,64) dominates
+    # every model shape — gate_up 96% / o 96% / qkv 93% / down 86% of
+    # cuBLAS _int_mm (M=2048, graph caliber). down (6144, 2048) re-enters
+    # the fused table: at 86% the epilogue+launch saving pays back (its
+    # earlier 59% tile lost to the cuBLAS chain). GROUP_M=4 beat 8 on the
+    # top configs (L2 swizzle; down -8%).
+    (2048, 12288): (256, 256, 64, 4, 8, 2),
+    (6144, 2048): (256, 256, 64, 4, 8, 2),
+    (2048, 2560): (256, 256, 64, 4, 8, 2),
+    (2048, 2048): (256, 256, 64, 4, 8, 2),
 }
 _FUSED_WARMED: set = set()  # (K, N, even_m) specializations launched once
 _FUSED_GEMM_BROKEN = False  # memoized off-switch (never risk mgr.call crawl)
@@ -323,7 +324,7 @@ if _HAS_TRITON:
         if torch.cuda.is_current_stream_capturing() and key not in _FUSED_WARMED:
             return None
         try:
-            BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages = cfg
+            BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages = cfg
             out = torch.empty((M, N), dtype=torch.bfloat16, device=x_q.device)
             xs = x_scale if x_scale.is_contiguous() else x_scale.contiguous()
             ws = (
@@ -348,7 +349,7 @@ if _HAS_TRITON:
                 BLOCK_M=BLOCK_M,
                 BLOCK_N=BLOCK_N,
                 BLOCK_K=BLOCK_K,
-                GROUP_M=8,
+                GROUP_M=GROUP_M,
                 HAS_BIAS=bias is not None,
                 EVEN_M=even_m,
                 num_warps=num_warps,

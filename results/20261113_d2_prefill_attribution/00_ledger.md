@@ -151,3 +151,27 @@ gate_up (256,128,64,w8,s2) / down,qkv,o (128,256,64,w8,s2)，按形状查表，�
 ## 4. P0 decode skinny GEMM 设计存档（推迟；若重启须换两段归约替代 atomic——split-K atomic 位精确存疑）
 
 要点：kernel 落 `int_mm.py`（L206 垫零分支前插 M≤16 分支），裸 triton.jit，grid=(cdiv(N,BN),)，BLOCK_M∈{1,16} 两实例，int8 tl.dot int32 acc + epilogue 融尾（`(acc·xs)·ws` 两条独立乘）；参数初值 M=1:(BM1,BN128,BK512,w4,s2) / M=16:(BM16,BN128,BK256,w4,s2-3)；env `VLLM_FL_INTMM_SKINNY` 默认 1 + capture 守卫（`is_current_stream_capturing()` 未 warm 回退旧路径）+ try/except 静默回退；变体 A（M=1 复用 BM16 实例）/B（mul+sum 仅诊断）/C（dp4a inline_asm，需 [N,K] 重排 +2GB 显存，须用户批准）。判据 graph 口径 M=1/16 ≥1.3×；单测 oracle/模板见 test_w8a8_int_mm.py L69-82/L256-278/L297-320。
+
+## 0.6 Step 3b 深挖战报（skill 方法论驱动，2026-11-13 深夜）
+
+方法论：optimize-triton-block-parameters skill（smem 模型/配置空间/≥6-8 配置/边界形状/
+>70% 效率判据）。生产 kernel 全配置深扫（phase0c_sweep_prod.py，驱动真实 kernel 含
+epilogue 尾）：**(256,256,64,GROUP_M=4,w8,s2) 全面碾压**——
+
+| shape | 旧配置 | 新最优 | vs cuBLAS(_int_mm) | graph vs 链 M=2048 | eager vs 链 |
+|---|---|---|---|---|---|
+| gate_up | (256,128)799.7µs | **486.8µs** | **96%** | **4.78×** | 3.79× |
+| o | (128,256)90.9µs | **81.0µs** | **96%** | 1.42× | 2.63× |
+| qkv | (128,256)126.1µs | **118.0µs** | **93%** | 1.35× | 1.84× |
+| down | 曾 59% 走链 | **221.3µs(G_M4)** | **86%（重入融合表）** | 1.10× | 1.18× |
+
+- **每层 4 线性全部融合，eager 合计 4.16→1.61ms = 2.59×**（深挖前 1.78×）；M=1024 档
+  亦全赢（1.10-2.06×）
+- ixkncli 复核：生产 kernel 488µs 实测落地（=sweep 值）；grid 384、smem 64KB、矩阵
+  指令路径维持
+- 指令级验证闭环：Triton cache `.asm` 实为 **iluvatar 原生 ISA**（非 NVIDIA SASS，
+  ixobjdump --sass 不适用方言）：1273 条 ml + 441 条 sl 矩阵装载族指令主导 K 循环，
+  has_wgmma=0——vendor 矩阵路径与 ixkncli 6.29M 矩阵指令互证
+- 精度 30 题对拍：acc 0.9333=fake、same_ans 0.90→**0.9333**、gate 过
+- case1 烟测单轮 2288（缓存双峰噪声带内，pass4 未全热；kernel 层 2.59× 为硬数据）
+- 未竟：quant prologue 单 kernel 化（每层 4×quant≈174µs 占融合链 10.8%，下一候选）
