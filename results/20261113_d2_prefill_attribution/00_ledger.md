@@ -25,10 +25,29 @@ tl.dot 确实下探矩阵指令路径；grid 768×512thr，109 vec regs，49KB s
 主因，后续调参方向 = 减小 BK/BN 降 smem 提 CTA 数（当前 68-74 T-MAC/s 已够赢 eager）。
 ixobjdump 步省略（指令统计已证实矩阵路径）。
 
-遗留优化空间（明日按 ROI）：
-1. qkv/o 试 BM256（gate_up 靠它 18%→62%；qkv/o 权重 4-5MB 可全驻 L2，预期增益小）
-2. down 深挖（BK=128/GROUP_M/cache_modifier .cg）或接受 cuBLAS
-3. 官方双场景 bench ≥3 中位 + 105 题精度（Step 5 收尾，冻结线 11/15 前）
+遗留优化空间（明日按 ROI，深扫脚本 scripts/d2/phase0c_sweep_prod.py 已就绪待 GPU）：
+
+## 0.5 融合 kernel 深挖计划（Step 3b，用户问责「未到极致」后立档）
+
+已知差距与主攻方向（按预期 ROI）：
+1. **4-CTA smem 族配置**（ixkncli：占用 12.5% 瓶颈 = 49KB smem → 2 CTA/CU）：
+   (128,128,64,s2)=32KB 等 ≤32KB 族 probe1 恰好漏扫——理论上 4 CTA/CU 翻倍占用，
+   latency hiding 翻倍，gate_up 62%→? cuBLAS 的最大候选。
+2. **GROUP_M ∈ {4,8,16}**（从未扫过，L2 swizzle 敏感参数）。
+3. **ixobjdump SASS**：确认 int8 dot 下探的 mma 形态/操作数宽度（指令统计已证实
+   矩阵路径 6.29M，但形态未知；cache cubin 用 --fun '.*fused_gemm.*' --sass）。
+4. **down 深扫**：≥80% cuBLAS 则重新入融合表（现 59% 走链）。
+5. **quant prologue 融进 GEMM（2→1 kernel）**：kernel 内两遍法——pass1 对本 program
+   的 BM 行全 K bf16 absmax（x ≤8MB 全驻 L2 16MB，重读放大 ~96×由 L2 吃），pass2
+   K 循环边量化边 dot。位精确数学逐字照抄 `_dynamic_per_token_quant_int8_bare_kernel`
+   （quantization.py L75-143：`fdiv(1.0,absmax,ieee_rounding=True)*127.0` /
+   `absmax*(1.0/127.0)` / round-half-even / clamp）。收益：省 quant kernel
+   ~28µs GPU + 一次 launch（eager ~40-80µs）×3 融合线性/层 ≈ 每层 6-8%。
+   风险：寄存器压力（bf16 tile + absmax 累加）；位精确单测锁死（oracle 同款）。
+6. cache_modifier=".cg" B 流变体：若 sweep 后仍 L2 bound 再加 kernel 参数变体。
+
+补充候选（ROI 靠后）：qkv/o 试 BM256（gate_up 靠它 18%→62%；qkv/o 权重 4-5MB 可全驻
+L2，预期增益小）；官方双场景 bench ≥3 中位 + 105 题精度（Step 5a 过夜跑中）。
 
 
 
