@@ -188,3 +188,17 @@ epilogue 尾）：**(256,256,64,GROUP_M=4,w8,s2) 全面碾压**——
 **算子层收口**：prefill 线性链 = quant（最优形态）+ 融合 GEMM（86-96%）两 kernel 分工，
 decode = cuBLAS pad-17 链（graph 内 launch 免费、已赢 bf16）。剩余绝对大头是 attention
 （80% of prefill forward，两臂同 bf16，属 D0 fl.attn-launch 收尾项非 D2 算子项）。
+
+## 0.8 a+b 微调终态 + 最终烟测（2026-11-13 深夜收口）
+
+- **b) w16 捡到**：(256,256,64,G4,**w16**,s2) —— o 1.074×/qkv 1.109×/down 1.029×（gate_up 平），
+  **qkv/o 反超 cuBLAS 达 103%**，down 96%、gate_up 95%。已回填生产表（167 单测全绿）。
+- **a) cache modifier 关案**：B 流 .cg / evict_first 全部 0.995-1.001×（本 backend 无效）。
+- s3 大负 0.54-0.63×（96KB smem → 1CTA 实锤）；GM2/16 平。
+- 最终烟测：case1 2317 tok/s（原链 1415 的 1.64×，单轮噪声带 [2288,2961] 内）、
+  case2 1347（decode 零回退）、30 题 gate pass（acc 0.90 波动带 [0.90,0.9333] 内）。
+- P3 lm_head int8：用户裁定不做。
+
+**算子层最终格局**：prefill = quant + 融合 GEMM（95-103% cuBLAS，w16）；decode =
+cuBLAS pad-17 链（graph 内）。相对第一天链路：每层 eager 线性链 4.16→~1.58ms ≈ 2.6×，
+四方向死案（1-kernel/quant-blocked/skinny/cache-mod）全部数据立档。下一步：官方全量收尾。

@@ -178,16 +178,16 @@ if _HAS_TRITON:
 # ``_int_mm`` + epilogue pair; every other shape keeps the cuBLAS chain.
 _FUSED_GEMM_CONFIGS = {
     # (K, N) -> (BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages)
-    # phase0c production-kernel sweep (2026-11-13): (256,256,64) dominates
-    # every model shape — gate_up 96% / o 96% / qkv 93% / down 86% of
-    # cuBLAS _int_mm (M=2048, graph caliber). down (6144, 2048) re-enters
-    # the fused table: at 86% the epilogue+launch saving pays back (its
-    # earlier 59% tile lost to the cuBLAS chain). GROUP_M=4 beat 8 on the
-    # top configs (L2 swizzle; down -8%).
-    (2048, 12288): (256, 256, 64, 4, 8, 2),
-    (6144, 2048): (256, 256, 64, 4, 8, 2),
-    (2048, 2560): (256, 256, 64, 4, 8, 2),
-    (2048, 2048): (256, 256, 64, 4, 8, 2),
+    # phase0c sweep: (256,256,64) dominates every model shape; phase0g edge
+    # sweep: num_warps=16 (1024 threads/block) beats 8 on the three smaller
+    # shapes — o 1.074x / qkv 1.109x / down 1.029x (gate_up flat), putting
+    # o and qkv ABOVE cuBLAS _int_mm (103%). num_stages=3 loses 0.54-0.63x
+    # (96KB smem -> 1 CTA/CU); B-stream cache_modifier .cg / evict_first
+    # are no-ops on this backend.
+    (2048, 12288): (256, 256, 64, 4, 16, 2),
+    (6144, 2048): (256, 256, 64, 4, 16, 2),
+    (2048, 2560): (256, 256, 64, 4, 16, 2),
+    (2048, 2048): (256, 256, 64, 4, 16, 2),
 }
 _FUSED_WARMED: set = set()  # (K, N, even_m) specializations launched once
 _FUSED_GEMM_BROKEN = False  # memoized off-switch (never risk mgr.call crawl)
