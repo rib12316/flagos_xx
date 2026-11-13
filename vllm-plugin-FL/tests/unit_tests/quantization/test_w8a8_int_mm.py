@@ -199,6 +199,7 @@ def test_fused_epilogue_bitidentical_to_torch_chain(
     )
 
     monkeypatch.setenv("VLLM_FL_INTMM_FUSED_EPILOGUE", "1")
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_GEMM", "0")
     fused = int_mm_mod.int8_scaled_mm_int_mm(
         x_q, weight, x_scale, weight_scale, bias=bias, out_dtype=torch.bfloat16
     )
@@ -208,6 +209,75 @@ def test_fused_epilogue_bitidentical_to_torch_chain(
     )
 
     _assert_bf16_matches_reference(fused, chain, bias)
+
+
+@pytest.mark.parametrize("M", [17, 64, 1024, 2050])
+@pytest.mark.parametrize(
+    "K_N",
+    [(2048, 2560), (6144, 2048), (2048, 12288), (2048, 2048)],
+    ids=["qkv", "down", "gate_up", "o"],
+)
+@pytest.mark.parametrize("with_bias", [False, True])
+@needs_int_mm
+def test_fused_gemm_bitidentical_to_cublas_chain(monkeypatch, M, K_N, with_bias):
+    """VLLM_FL_INTMM_FUSED_GEMM toggles fused-kernel vs cuBLAS-chain paths.
+
+    The fused kernel must reproduce the cuBLAS chain bit-for-bit on the
+    no-bias path (model quantized projections are bias-free); M=2050
+    exercises the chunk-tail M masking (2050 % 256 != 0, 2050 % 128 != 0).
+    """
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    K, N = K_N
+    x_q, x_scale, weight, weight_scale, bias = _make_operands(
+        M, K, N, with_bias=with_bias
+    )
+
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_GEMM", "1")
+    fused = int_mm_mod.int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, bias=bias,
+        out_dtype=torch.bfloat16,
+    )
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_GEMM", "0")
+    chain = int_mm_mod.int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, bias=bias,
+        out_dtype=torch.bfloat16,
+    )
+
+    assert fused.shape == (M, N)
+    _assert_bf16_matches_reference(fused, chain, bias)
+
+
+@needs_int_mm
+def test_fused_gemm_survives_fullgraph_compile():
+    """The fused branch hides inside the custom op boundary — dynamo must
+    stay able to fullgraph-compile across M (AOT bakes a large-M trace, then
+    capture/run-time M must still route correctly), mirroring the serve
+    invariant that first kept the M<17 padding inside the custom op."""
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    K, N = 2048, 2560  # fused config-table shape
+    gen = torch.Generator().manual_seed(11)
+    w8 = torch.randint(
+        -127, 128, (K, N), generator=gen, dtype=torch.int8
+    ).cuda()
+    ws = (torch.rand(N, generator=gen) / 8 + 1e-4).cuda()
+
+    def fn(x_q, xs):
+        return int_mm_mod.int8_scaled_mm_int_mm(
+            x_q, w8, xs, ws, out_dtype=torch.bfloat16
+        )
+
+    for M in (64, 128, 2050):
+        gen_m = torch.Generator().manual_seed(M)
+        x_q = torch.randint(
+            -127, 128, (M, K), generator=gen_m, dtype=torch.int8
+        ).cuda()
+        xs = (torch.rand(M, 1, generator=gen_m) / 8 + 1e-4).cuda()
+        compiled = torch.compile(fn, fullgraph=True, dynamic=False)
+        out = compiled(x_q, xs)
+        assert out.shape == (M, N)
+        assert torch.equal(out, fn(x_q, xs))
 
 
 @needs_int_mm
@@ -428,6 +498,10 @@ def test_dispatch_falls_back_to_scaledmm_when_intmm_fails(monkeypatch):
     x_q, x_scale, weight, weight_scale, _ = _make_operands(
         64, 2048, 2560, with_bias=False
     )
+    # Exercise the cuBLAS chain specifically: the fused single-kernel path
+    # (on for config-table shapes like this one) does not call torch._int_mm
+    # and would legitimately succeed past the simulated failure.
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_GEMM", "0")
     monkeypatch.setattr(torch, "_int_mm", broken_int_mm)
 
     out = CachedOp("w8a8_dynamic_per_token_linear")(
