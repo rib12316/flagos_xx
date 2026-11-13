@@ -175,3 +175,16 @@ epilogue 尾）：**(256,256,64,GROUP_M=4,w8,s2) 全面碾压**——
 - 精度 30 题对拍：acc 0.9333=fake、same_ans 0.90→**0.9333**、gate 过
 - case1 烟测单轮 2288（缓存双峰噪声带内，pass4 未全热；kernel 层 2.59× 为硬数据）
 - 未竟：quant prologue 单 kernel 化（每层 4×quant≈174µs 占融合链 10.8%，下一候选）
+
+## 0.7 算子层终判（2026-11-13 深夜，全部数据判决，Phase 0e/0f 探针）
+
+| 方向 | 判决 | 数据 |
+|---|---|---|
+| 1-kernel 融合（quant 前移进 GEMM） | ❌ **死案** | gate_up M=2048：absmax+bf16-A GEMM 最优 3467.7µs、真单 kernel 5260µs（位精确 OK）vs 生产 2-kernel 分工 **516.7µs** = 0.10-0.15×——K 循环内 bf16→f32→round→clamp→int8 转换链摧毁 dot 流水，远超 smem 占用推演代价 |
+| quant kernel 优化（blocked 多行/两遍法） | ❌ 死案 | 10 配置 × 4 形状全输现 kernel 0.89-0.94×（两遍 L2 重读 > 垫 lane 浪费）；现 kernel 410-475GB/s 已近含写回+两相依赖的实际墙 |
+| decode skinny（两段归约 split-K） | ❌ 三振出局 | 8 格全扫：M=16（真实 decode 档）0.74-1.08× 全输（cuBLAS pad-17 已达 427GB/s@gate_up）；仅 M=1 down/o 过 1.3× 但 M=1 不在官方 bench 关键路径（conc 64/128 → M=64/128 走链）。前两振：v1 无 split 输 2×、v2 atomic 位精确 FAIL |
+| **融合 GEMM+epilogue (256,256,64,G4)** | ✅ **上线终态** | 86-96% cuBLAS、每层 eager 2.59×、case1 冷启 2.09×、精度 0.9333=fake |
+
+**算子层收口**：prefill 线性链 = quant（最优形态）+ 融合 GEMM（86-96%）两 kernel 分工，
+decode = cuBLAS pad-17 链（graph 内 launch 免费、已赢 bf16）。剩余绝对大头是 attention
+（80% of prefill forward，两臂同 bf16，属 D0 fl.attn-launch 收尾项非 D2 算子项）。
