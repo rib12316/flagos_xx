@@ -27,6 +27,23 @@ ixobjdump 步省略（指令统计已证实矩阵路径）。
 
 遗留优化空间（明日按 ROI，深扫脚本 scripts/d2/phase0c_sweep_prod.py 已就绪待 GPU）：
 
+## 0.4 开源算子调研结论（用户问「能不能直接拿开源的用」，2026-11-13 夜）
+
+| 候选 | 判定 | 依据 |
+|---|---|---|
+| DeepSparkInference（天数自家，330+ 模型） | ❌ 无 kernel 可用 | 模型部署脚本库（ixrtexec/igie 驱动闭源引擎）；`models/benchmark/quantize_w8a8.py` 仅 llmcompressor SmoothQuant 转换脚本（与我们同配方家族）——int8 快路径全在 ixRT/IGIE 闭源 .so 内 |
+| iluvatar-corex-ixrt 引擎源码 | ❌ 取不到 | gitee deep-spark/iluvatar-corex-ixrt clone 无权限/不存在（ixrt skill 文档链接已失效） |
+| IST-DASLab/gemm-int8 | ❌ 编译不了 | CUTLASS + **SM80+**（Ada/Hopper 优化）+ nvcc/CUDA 11.8 工具链；Corex 栈是 clang→PTX→ptxas + ivcore11 方言，CUTLASS 不可编（tile 策略可参考但 ixrt skill 已有同源参考） |
+| vLLM cutlass/cutednn int8 | ❌ 已知死路 | sm75+/sm90 门（handover §P4 前科） |
+| FlagGems 上游（> in-tree 5.3.5） | ⚠️ 不跟进 | 2026-09 release 加的是 mm/gemv 等 bf16 算子（[releases](https://github.com/FlagOpen/FlagGems/releases)）；FlagOS weekly 的 BI-V150 算子队列重测是 ixdnn/ixblas vendor slot 工程非 scaled_mm int8 提速；且红线 pip 只从本仓库 + 冻结线内升级 in-tree FlagGems 的 dispatch 兼容风险 > 收益 |
+| cublasLt（Corex SDK `/usr/local/corex/include/cublasLt.h` = ixblasLt CUDA 兼容层） | ❌ 数学卡死 | int8 epilogue 表达力只有 per-tensor alpha + per-col bias；W8A8 需要 per-row(xs)×per-col(ws) 双向 scale——表达不了（NVIDIA 侧同理，vLLM 因此自写 cutlass_scaled_mm） |
+| torch._int_mm（ixblas） | ✅ 已在用 | vendor 最强 int8 GEMM（125 T-MAC/s @down）就是现路径的链内核 |
+
+**总结论**：本硬件栈（Corex clang/Triton flagtree 生态）与主流开源 int8 kernel 生态
+（CUTLASS/sm80+/nvcc）方言隔离，天数自家的快 kernel 全在闭源引擎（ixRT/ixblas/ixdnn）
+且 ixblas 已通过 `_int_mm` 在用——**「直接拿来用」无可编译现成品，自研 Triton 融合
+是本栈唯一开放路径**；开源价值集中在 tile 策略参考（IST-DASLab / ixrt skill INT8 参考）。
+
 ## 0.5 融合 kernel 深挖计划（Step 3b，用户问责「未到极致」后立档）
 
 已知差距与主攻方向（按预期 ROI）：
