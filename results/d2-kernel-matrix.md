@@ -89,3 +89,25 @@
 - 屋顶线常数：384 TOPS INT8 / ~1.2TB/s HBM（docs/track-b-quantization.md §1.2）
 - FP8 两卡均无；cutlass int8 sm90 门 → 均排除，勿再评估
 - B 线遗留数据（T1/T2/T4）不存在于本机（/workspace/verify-b、research/results 均无）→ Phase 3 全新跑
+
+---
+
+## 5. Phase 4 追加（2026-11-13/14，算子深挖线）：融合 GEMM+epilogue 自研 kernel
+
+**路径**：`vllm_fl/quantization/w8a8/int_mm.py::_w8a8_fused_gemm_kernel`（裸 triton.jit，
+int8 tl.dot int32 acc + 寄存器内 epilogue `(acc·xs)·ws` + bf16 单次写出），经既有
+`vllm_fl::w8a8_int_mm_scaled_gemm` custom op 内部分支接线，dispatch 层零改动。
+
+| 项 | 终态 |
+|---|---|
+| 配置 | (BLOCK_M=256, BLOCK_N=256, BLOCK_K=64, GROUP_M=4, warps=16, stages=2)，四形状统一 |
+| 效率 vs cuBLAS _int_mm（M=2048 graph） | gate_up 95% / down 96% / qkv **103% 反超** / o **103% 反超** |
+| 每 layer eager 4 线性合计 | 4.16ms → ~1.58ms = **2.6×**（quant kernel 保持独立，2-kernel 分工实测最优） |
+| 路由 | M≥256 且 M%256==0 且 (K,N)∈表 → 融合；M<256 / 非整除尾 / 未知形状 → cuBLAS 垫零链 |
+| env | `VLLM_FL_INTMM_FUSED_GEMM=0` 整体关回链 |
+| 位精确 | 与 CPU oracle / cuBLAS 链逐位相等（167 单测，含 fullgraph 动态编译跨 M 模板） |
+
+**否定结论存档**（详 results/20261113_d2_prefill_attribution/00_ledger.md §0.7-0.8）：
+1-kernel 融合（quant 前移）0.10-0.15× 死案；quant blocked 多行全负；skinny 三振
+（v1 无 split 输 2× / v2 atomic 位精确坑 / v3 两段归约 M=16 档 0.74-1.08×）；
+B 流 cache_modifier 本 backend 无效。
