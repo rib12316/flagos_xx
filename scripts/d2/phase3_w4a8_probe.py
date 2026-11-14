@@ -82,13 +82,14 @@ def _w4a8_fused_gemm_kernel(
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.int32)
     for _ in range(0, K, BLOCK_K):
         a = tl.load(a_ptrs)
-        p = tl.load(b_ptrs)  # (BLOCK_K, BLOCK_N//2) int8
-        lo = (p & 0x0F).to(tl.int8)
-        hi = (p >> 4).to(tl.int8)
-        b = tl.interleave(lo, hi) - 8  # (BLOCK_K, BLOCK_N) int8, [-8,7]
+        p8 = tl.load(b_ptrs).to(tl.uint8)  # (BLOCK_K, BLOCK_N//2)
+        lo = (p8 & 0x0F).to(tl.int8)       # offset-binary nibble ∈ [0,15]
+        hi = (p8 >> 4).to(tl.int8)         # uint8 右移 = 逻辑移位（int8 算术移
+        #  在高半字节≥8 时错位）
+        b = tl.interleave(lo, hi) - 8      # (BLOCK_K, BLOCK_N) int8, [-8,7]
         acc = tl.dot(a, b, acc, out_dtype=tl.int32)
         a_ptrs += BLOCK_K
-        b_ptrs += (BLOCK_K // 1) * (N // 2)
+        b_ptrs += BLOCK_K * (N // 2)
     xs = tl.load(xs_ptr + offs_m)
     y = acc.to(tl.float32)
     y = y * xs[:, None]
@@ -113,10 +114,10 @@ def run():
         torch.manual_seed(0)
         a = torch.randint(-127, 128, (M, K), device=DEV, dtype=torch.int8)
         w = torch.randint(-8, 8, (K, N), device=DEV, dtype=torch.int8)
-        # packed[k, n//2] = (hi<<4)|lo，lo=偶列 nibble、hi=奇列 nibble
-        lo_n = w[:, ::2].to(torch.int16) & 0xF
-        hi_n = w[:, 1::2].to(torch.int16) & 0xF
-        wp = ((hi_n << 4) | lo_n).to(torch.int8).contiguous()
+        # packed[k, n//2] = (hi<<4)|lo；offset-binary：nibble = w + 8 ∈ [0,15]
+        lo_n = (w[:, ::2].to(torch.int16) + 8) & 0xF
+        hi_n = (w[:, 1::2].to(torch.int16) + 8) & 0xF
+        wp = ((hi_n << 4) | lo_n).to(torch.uint8).to(torch.int8).contiguous()
         xs = torch.rand(M, device=DEV) / 8 + 1e-4
         ws = torch.rand(N, device=DEV) / 8 + 1e-4
         ref = torch._int_mm(a, w)

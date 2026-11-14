@@ -96,6 +96,10 @@ def run():
     used = int(os.popen("/usr/local/corex/bin/ixsmi --query-gpu=memory.used "
                         "--format=csv,noheader,nounits").read())
     assert used < 3000, f"GPU busy: {used} MiB"
+    # get_kv_cache_layout 需 vLLM config 上下文（serve 外 assert）——serve 实测
+    # 为 NHD（stride_order 恒等），探针直接钉死同值
+    import vllm.v1.attention.backends.utils as _bku
+    _bku._KV_CACHE_LAYOUT_OVERRIDE = "NHD"
     from vllm.v1.attention.backends.utils import get_kv_cache_layout
     layout = get_kv_cache_layout()
     print(f"kv_cache_layout={layout}（NHD → get_kv_cache_shape 顺序即物理连续，"
@@ -133,9 +137,11 @@ def run():
             key, val, k8, v8, ks, vs, sm)
         torch.cuda.synchronize()
 
-        # 写入数值：dequant(key_cache)·scale ≈ key（int8 动态 scale 舍入 ~0.4%）
-        k_dq = k8[..., :HD].to(torch.float32) \
-            * ks.unsqueeze(-1).to(torch.float32)
+        # 写入数值：按 slot_mapping 收回 cache 行，dequant·scale ≈ key
+        # （int8 动态 scale 舍入 ~0.4%）
+        kq = k8[sm // BLOCK, sm % BLOCK, :, :HD]  # [n_tok, NKV, HD]
+        k_dq = kq.to(torch.float32) \
+            * ks[sm // BLOCK, sm % BLOCK].unsqueeze(-1).to(torch.float32)
         rel = (k_dq - key.to(torch.float32)).abs().max() \
             / key.to(torch.float32).abs().max()
         print(f"[{tag}] write dequant max_rel={rel:.4f} "
