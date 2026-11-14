@@ -9,7 +9,10 @@ config 驱动——本脚本不引入任何 serve 量化超参。
   - 每个量化 Linear 三键：weight_packed int32 [N, K/4]（offset-binary-128，小端
     低位在前，与 unpack_uint8b128_int32 严格互逆）、weight_scale fp32 [N,1]、
     weight_shape int64 [2] = [K, N]
-  - keep-list 层 / embed / lm_head / norms 保 bf16 原样
+  - keep-list 层 / embed / norms 保 bf16 原样；lm_head 默认保 bf16，
+    --lm-head-int8 时同样进 packed 表（无 fold 无 smooth，纯 per-channel RTN；
+    config targets 追加 "lm_head" —— vLLM ParallelLMHead 走同一
+    CompressedTensorsLinearMethod/packed scheme 路径，见 packed.py）
   - config.json 注入 quantization_config（targets:["Linear"] 类名匹配 → embedding
     天然不量化；ignore = keep-list 运行时融合模块名，粒度整模块）
   - tokenizer / chat_template / generation_config 原样拷贝
@@ -90,14 +93,17 @@ def build_ignore(keep_name: str) -> list[str]:
     raise ValueError(f"unknown keep preset: {keep_name}")
 
 
-def quantization_config(ignore: list[str]) -> dict:
+def quantization_config(ignore: list[str], lm_head_int8: bool = False) -> dict:
+    # targets ["Linear"] 只按类名匹配 nn.Linear —— ParallelLMHead 不是 Linear，
+    # 必须显式加 "lm_head"（无 "."，vllm mapper 保形、后缀匹配命中 lm_head 模块）
+    targets = ["Linear"] + (["lm_head"] if lm_head_int8 else [])
     return {
         "config_groups": {"group_0": {
             "input_activations": {"num_bits": 8, "type": "int", "symmetric": True,
                                   "strategy": "token", "dynamic": True},
             "weights": {"num_bits": 8, "type": "int", "symmetric": True,
                         "strategy": "channel", "dynamic": False},
-            "targets": ["Linear"]}},
+            "targets": targets}},
         "format": "pack-quantized",
         "ignore": ignore,
         "quant_method": "compressed-tensors",
@@ -113,6 +119,9 @@ def main() -> int:
     ap.add_argument("--smooth-alpha", type=float, default=0.0)
     ap.add_argument("--act-stats", default=None)
     ap.add_argument("--keep", default="none")
+    ap.add_argument("--lm-head-int8", action="store_true",
+                    help="lm_head 也进 packed int8 表（P1：decode 每步省 267MB "
+                         "权重读；targets 追加 lm_head；默认关保 v1 可复现）")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--self-check", action="store_true")
     args = ap.parse_args()
@@ -174,16 +183,34 @@ def main() -> int:
             out[f"{key}_shape"] = torch.tensor([Wq.shape[1], Wq.shape[0]], dtype=torch.int64)
             n_packed += 1
 
+    # lm_head int8（与 v1 的唯一差异点）：无 fold 无 smooth（fold 站点只在层内），
+    # 纯 per-channel RTN，三键格式与层内投影逐字一致
+    if args.lm_head_int8:
+        W = tensors["lm_head.weight"]
+        assert W.ndim == 2 and W.shape[1] % 4 == 0, \
+            f"lm_head 形状异常: {tuple(W.shape)}"
+        Wq = W.to(torch.float32)
+        alpha = pick_alpha(Wq, args.clip_alpha, "lm_head.weight", clip_table)
+        wq, ws = rtn_channel_quant(Wq, alpha)
+        out["lm_head.weight_packed"] = pack_int8_offset_binary(wq)
+        out["lm_head.weight_scale"] = ws.to(torch.float32).reshape(-1, 1)
+        out["lm_head.weight_shape"] = torch.tensor(
+            [Wq.shape[1], Wq.shape[0]], dtype=torch.int64)
+        n_packed += 1
+
     # 全局张量原样
     for k, v in tensors.items():
         if not re.search(r"layers\.\d+\.", k):
+            if args.lm_head_int8 and k == "lm_head.weight":
+                continue  # 已进 packed 表
             out[k] = v
 
     save_file(out, f"{args.dst}/{shard}", metadata={"format": "pt"})
 
     # config 注入 + 附属文件拷贝
     cfg = json.load(open(f"{args.src}/config.json"))
-    cfg["quantization_config"] = quantization_config(build_ignore(args.keep))
+    cfg["quantization_config"] = quantization_config(
+        build_ignore(args.keep), args.lm_head_int8)
     with open(f"{args.dst}/config.json", "w") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     for fn in os.listdir(args.src):
@@ -192,7 +219,8 @@ def main() -> int:
     shutil.copy2(f"{args.src}/model.safetensors.index.json", f"{args.dst}/")
 
     print(f"RESULT|mode=convert|tensors_packed={n_packed}|keep={args.keep}|"
-          f"clip={args.clip_alpha}|smooth={args.smooth_alpha}|dst={args.dst}")
+          f"lm_head_int8={args.lm_head_int8}|clip={args.clip_alpha}|"
+          f"smooth={args.smooth_alpha}|dst={args.dst}")
 
     if args.self_check:
         return self_check(args.dst, shard, n_packed, clip_table)
@@ -254,7 +282,9 @@ def self_check(dst: str, shard: str, expect_packed: int, clip_table: dict) -> in
         assert scale_rel <= 0.02, f"数值对拍超限 {k}: {scale_rel:.3e} > 2% 输出幅值"
     print(f"RESULT|check=numeric|sampled=5|worst_scale_rel={worst:.2e}|limit=2%")
 
-    # 3) scheme 选择（config 驱动激活命中）
+    # 3) scheme 选择（config 驱动激活命中）——走 serve 真实路径
+    #    get_scheme(layer, layer_name)：targets 匹配（类名/后缀）→ scheme parts →
+    #    patched _get_scheme_from_parts。哑模块只借类名（type(layer).__name__）。
     from vllm_fl.quantization.w8a8.packed import (
         CompressedTensorsPackedW8A8Int8, install_packed_w8a8_scheme,
     )
@@ -263,17 +293,29 @@ def self_check(dst: str, shard: str, expect_packed: int, clip_table: dict) -> in
         compressed_tensors import CompressedTensorsConfig
     qc = CompressedTensorsConfig.from_config(
         json.load(open(f"{dst}/config.json"))["quantization_config"])
-    scheme = qc._get_scheme_from_parts(
-        weight_quant=qc.config_groups["group_0"].weights,
-        input_quant=qc.config_groups["group_0"].input_activations,
-        layer_name="model.layers.0.self_attn.qkv_proj")
+
+    import torch.nn as nn
+
+    class _ParallelLMHead(nn.Module):  # 类名对位 serve 端 ParallelLMHead
+        pass
+
+    scheme = qc.get_scheme(nn.Linear(4, 4),
+                           "model.layers.0.self_attn.qkv_proj")
     assert isinstance(scheme, CompressedTensorsPackedW8A8Int8), \
         f"scheme 未命中: {type(scheme)}"
-    from compressed_tensors.quantization import QuantizationArgs
-    lm_scheme = qc._get_scheme_from_parts(
-        weight_quant=QuantizationArgs(num_bits=8), input_quant=None,
-        layer_name="lm_head")  # lm_head 无 input_quant → 上游走 None/embedding 分支
-    print(f"RESULT|check=scheme|layer=PackedW8A8Int8|cap={scheme.get_min_capability()}|ok=True")
+    lm_scheme = qc.get_scheme(_ParallelLMHead(), "lm_head")
+    if "lm_head.weight_packed" in t:
+        # P1 形态：targets 含 "lm_head" → 必须命中 packed scheme
+        assert isinstance(lm_scheme, CompressedTensorsPackedW8A8Int8), \
+            f"lm_head scheme 未命中: {type(lm_scheme)}"
+        lm_desc = "PackedW8A8Int8"
+    else:
+        # v1 形态：targets 只有 Linear → lm_head 不匹配 → None（bf16 回落）
+        assert lm_scheme is None, \
+            f"v1 形态 lm_head 应回落 bf16: {type(lm_scheme)}"
+        lm_desc = "None(bf16)"
+    print(f"RESULT|check=scheme|layer=PackedW8A8Int8|lm_head={lm_desc}|"
+          f"cap={scheme.get_min_capability()}|ok=True")
     return 0
 
 
