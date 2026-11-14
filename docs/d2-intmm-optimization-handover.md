@@ -3,6 +3,14 @@
 > 写于 2026-11-13 凌晨，交接人：D2 算子优化会话 agent（feat/d2-w8a8-quant，本会话新增 8 commits，
 > 累计 17 commits 未合入 main）。前序交接：`docs/d2-operator-handover.md`（精度线+硬件闸门判定，
 > 其地面真相继续有效，本文不重复）。
+>
+> **【2026-11-14 终态增注】算子深挖线已收口**（详见 `results/20261113_d2_prefill_attribution/00_ledger.md`）：
+> ① 融合 GEMM+epilogue 自研 kernel 上线（`(256,256,64,G4,w16,s2)`，qkv/o **103% 反超** cuBLAS、
+> down 96%、gate_up 95%，每 layer eager 4 线性 **2.6×**，M≥256 融合/M<256+尾 chunk 走链，
+> env `VLLM_FL_INTMM_FUSED_GEMM` 可关）；② 四方向死案数据立档（1-kernel 融合 0.10-0.15×、
+> quant blocked 全负、skinny 三振、cache_modifier 无效）；③ §0 的「快速烟测 0.764× 回退」
+> 已被 3 轮中位推翻（prefix cache 双峰噪声）；④ 官方全量 run1/2：4K 2838/2836（+6.4%）、
+> 16K 1345.9/1346.0（+5.4%）双超基线。本文其余内容为当时地面真相，量化链口径仍有效。
 > **新核心目标：算子层面继续深挖（自实现融合算子等），把 W8A8 真量化推理加速从「过闸门」
 > 推向「显著加速」**。当前 int8 链 GPU 侧只有 42% 标称效率，且存在结构性带宽浪费（见 §5）。
 
