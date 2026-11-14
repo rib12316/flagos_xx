@@ -189,14 +189,47 @@ _FUSED_GEMM_CONFIGS = {
     (2048, 2560): (256, 256, 64, 4, 16, 2),
     (2048, 2048): (256, 256, 64, 4, 16, 2),
 }
-_FUSED_WARMED: set = set()  # (K, N, even_m) specializations launched once
+_FUSED_WARMED: set = set()  # (K, N, even_m, cfg) specializations launched once
 _FUSED_GEMM_BROKEN = False  # memoized off-switch (never risk mgr.call crawl)
 _FUSED_GEMM_MIN_M = 256  # below this the cuBLAS chain wins (see _run_fused_gemm)
+
+# Decode tier, keyed (M, K, N). vLLM pads official-bench decode batches to
+# exactly M=64/128 inside the FULL_DECODE_ONLY cudagraphs; the phase0d sweep
+# (results/20261114_d2_decode_sweep) shows small-BM tiles beating the cuBLAS
+# chain 1.16-1.62x there — the M<256 gate had been calibrated against
+# (256,256) tiles, which starve the 16 SMs at these M. GROUP_M=1: with
+# num_pid_m <= 2 the grouped scheduling degenerates to identity. Only
+# (M, shape) points past the >=1.15x graph gate are listed (lm_head@64
+# stays on the chain at 1.106x); every other decode size keeps the chain.
+_FUSED_GEMM_DECODE_CONFIGS = {
+    # (M, K, N) -> (BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages)
+    (64, 2048, 12288): (64, 256, 64, 1, 4, 2),  # 1.160x
+    (128, 2048, 12288): (128, 128, 64, 1, 8, 2),  # 1.219x
+    (64, 2048, 2560): (64, 128, 128, 1, 8, 2),  # 1.448x
+    (128, 2048, 2560): (128, 128, 64, 1, 8, 2),  # 1.239x
+    (64, 2048, 2048): (64, 128, 128, 1, 8, 2),  # 1.567x
+    (128, 2048, 2048): (64, 128, 128, 1, 8, 2),  # 1.616x
+    (64, 6144, 2048): (64, 128, 128, 1, 8, 2),  # 1.564x
+    (128, 6144, 2048): (64, 128, 128, 1, 8, 2),  # 1.478x
+    # lm_head (M=128 passes 1.165x; joins live traffic with the P1
+    # int8-lm_head checkpoint — bf16 lm_head never routes here).
+    (128, 2048, 130560): (128, 256, 64, 1, 8, 2),
+}
+_FUSED_GEMM_DECODE_BROKEN = False  # memoized off-switch, decode tier only
 
 
 def _fused_gemm_enabled() -> bool:
     """Fused single-kernel GEMM+epilogue toggle (on by default)."""
     return os.environ.get("VLLM_FL_INTMM_FUSED_GEMM", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def _fused_gemm_decode_enabled() -> bool:
+    """Decode-tier (exact M=64/128) fused GEMM toggle (on by default)."""
+    return os.environ.get("VLLM_FL_INTMM_FUSED_DECODE", "1").lower() in (
         "1",
         "true",
         "yes",
@@ -286,6 +319,71 @@ if _HAS_TRITON:
                 mask=m_mask[:, None],
             )
 
+    def _launch_fused_gemm(
+        x_q: torch.Tensor,
+        weight: torch.Tensor,
+        x_scale: torch.Tensor,
+        weight_scale: torch.Tensor,
+        bias: torch.Tensor | None,
+        M: int,
+        N: int,
+        K: int,
+        cfg: tuple,
+    ) -> torch.Tensor | None:
+        """Launch the fused kernel with a given config; None = no fused run
+        (odd-M tail, or unwarmed inside a capture — caller falls back to the
+        cuBLAS chain). Exceptions propagate: the caller memoizes its tier's
+        off-switch."""
+        BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages = cfg
+        even_m = M % BLOCK_M == 0
+        if not even_m:
+            # Odd-M chunk tails keep the cuBLAS chain: the masked fused path
+            # pays 3-6x predication on this backend. Official bench inputs
+            # (4096/16384) divide the 2048 token budget exactly, so tails are
+            # rare; the masked kernel branch stays for generality.
+            return None
+        # Triton JIT compiles with device-side syncs — illegal inside a CUDA
+        # graph capture. vLLM's dummy forward (M=2048) warms the even-M
+        # specialization of each (K, N, cfg); anything else inside a capture
+        # falls back to the cuBLAS chain. The cfg is part of the warm key so
+        # a warmed prefill tile never green-lights an uncompiled decode tile
+        # (and vice versa).
+        key = (K, N, even_m, cfg)
+        if torch.cuda.is_current_stream_capturing() and key not in _FUSED_WARMED:
+            return None
+        out = torch.empty((M, N), dtype=torch.bfloat16, device=x_q.device)
+        xs = x_scale if x_scale.is_contiguous() else x_scale.contiguous()
+        ws = (
+            weight_scale
+            if weight_scale.is_contiguous()
+            else weight_scale.contiguous()
+        )
+        bias_arg = bias if bias is not None else x_q  # unread when HAS_BIAS=0
+        if bias is not None and not bias.is_contiguous():
+            bias_arg = bias.contiguous()
+        grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N),)
+        _w8a8_fused_gemm_kernel[grid](
+            x_q,
+            weight,
+            out,
+            xs,
+            ws,
+            bias_arg,
+            M,
+            N,
+            K,
+            BLOCK_M=BLOCK_M,
+            BLOCK_N=BLOCK_N,
+            BLOCK_K=BLOCK_K,
+            GROUP_M=GROUP_M,
+            HAS_BIAS=bias is not None,
+            EVEN_M=even_m,
+            num_warps=num_warps,
+            num_stages=num_stages,
+        )
+        _FUSED_WARMED.add(key)
+        return out
+
     def _run_fused_gemm(
         x_q: torch.Tensor,
         weight: torch.Tensor,
@@ -296,67 +394,46 @@ if _HAS_TRITON:
         N: int,
         K: int,
     ) -> torch.Tensor | None:
-        """Launch the fused kernel, or None to fall back to the cuBLAS chain."""
-        global _FUSED_GEMM_BROKEN
+        """Launch the fused kernel (decode or prefill tier), or None to fall
+        back to the cuBLAS chain."""
+        global _FUSED_GEMM_BROKEN, _FUSED_GEMM_DECODE_BROKEN
+        # Decode tier: exact-M table (see _FUSED_GEMM_DECODE_CONFIGS). A miss
+        # (other decode sizes, unknown shapes) falls through to the prefill
+        # gate below, which keeps those on the cuBLAS chain — the decode
+        # cudagraph regime is untouched for everything but {64,128}.
+        if (
+            not _FUSED_GEMM_DECODE_BROKEN
+            and _fused_gemm_decode_enabled()
+            and M in (64, 128)
+        ):
+            cfg = _FUSED_GEMM_DECODE_CONFIGS.get((M, K, N))
+            if cfg is not None:
+                try:
+                    out = _launch_fused_gemm(
+                        x_q, weight, x_scale, weight_scale, bias, M, N, K, cfg
+                    )
+                    if out is not None:
+                        return out
+                except Exception:
+                    # Same rationale as the prefill tier: never let an impl
+                    # exception crawl the CachedOp slow path — only this
+                    # tier is disabled, prefill stays fused.
+                    _FUSED_GEMM_DECODE_BROKEN = True
         if _FUSED_GEMM_BROKEN:
             return None
         cfg = _FUSED_GEMM_CONFIGS.get((K, N))
         if cfg is None:
             return None
-        # Decode batches (official bench conc <= 128 -> M <= 128) run inside
-        # cudagraphs where launches are free and the cuBLAS chain already
-        # wins; at small M the fused grid also starves the 16 SMs. Fused is
-        # for the chunked-prefill regime.
+        # Prefill tier. Non-{64,128} decode batches stay on the cuBLAS chain:
+        # they run inside cudagraphs where launches are free and the chain
+        # already wins bf16; at small M the (256,256) tile starves the 16
+        # SMs. Fused is for the chunked-prefill regime.
         if M < _FUSED_GEMM_MIN_M:
             return None
-        even_m = M % cfg[0] == 0
-        if not even_m:
-            # Odd-M chunk tails keep the cuBLAS chain: the masked fused path
-            # pays 3-6x predication on this backend. Official bench inputs
-            # (4096/16384) divide the 2048 token budget exactly, so tails are
-            # rare; the masked kernel branch stays for generality.
-            return None
-        # Triton JIT compiles with device-side syncs — illegal inside a CUDA
-        # graph capture. vLLM's dummy forward (M=2048) warms the even-M
-        # specialization of each (K, N); anything else inside a capture
-        # falls back to the cuBLAS chain.
-        key = (K, N, even_m)
-        if torch.cuda.is_current_stream_capturing() and key not in _FUSED_WARMED:
-            return None
         try:
-            BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages = cfg
-            out = torch.empty((M, N), dtype=torch.bfloat16, device=x_q.device)
-            xs = x_scale if x_scale.is_contiguous() else x_scale.contiguous()
-            ws = (
-                weight_scale
-                if weight_scale.is_contiguous()
-                else weight_scale.contiguous()
+            return _launch_fused_gemm(
+                x_q, weight, x_scale, weight_scale, bias, M, N, K, cfg
             )
-            bias_arg = bias if bias is not None else x_q  # unread when HAS_BIAS=0
-            if bias is not None and not bias.is_contiguous():
-                bias_arg = bias.contiguous()
-            grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N),)
-            _w8a8_fused_gemm_kernel[grid](
-                x_q,
-                weight,
-                out,
-                xs,
-                ws,
-                bias_arg,
-                M,
-                N,
-                K,
-                BLOCK_M=BLOCK_M,
-                BLOCK_N=BLOCK_N,
-                BLOCK_K=BLOCK_K,
-                GROUP_M=GROUP_M,
-                HAS_BIAS=bias is not None,
-                EVEN_M=even_m,
-                num_warps=num_warps,
-                num_stages=num_stages,
-            )
-            _FUSED_WARMED.add(key)
-            return out
         except Exception:
             # Any failure permanently disables the fused path (an impl
             # exception would otherwise drop the CachedOp into the ~0.7ms

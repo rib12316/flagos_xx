@@ -248,6 +248,157 @@ def test_fused_gemm_bitidentical_to_cublas_chain(monkeypatch, M, K_N, with_bias)
     _assert_bf16_matches_reference(fused, chain, bias)
 
 
+_DECODE_SHAPES = [
+    (2048, 2560, "qkv"),
+    (6144, 2048, "down"),
+    (2048, 12288, "gate_up"),
+    (2048, 2048, "o"),
+    (2048, 130560, "lm_head"),
+]
+
+
+def _raw_operands(M, K, N, seed=0):
+    """Arbitrary int8 operands — enough for fused-vs-chain bit-identity
+    (the GEMM contract), without the fp32 [N, K] CPU oracle tensors that
+    make _make_operands heavy at lm_head's N=130560."""
+    gen = torch.Generator().manual_seed(seed)
+    x_q = torch.randint(
+        -127, 128, (M, K), generator=gen, dtype=torch.int8
+    ).cuda()
+    weight = torch.randint(
+        -127, 128, (K, N), generator=gen, dtype=torch.int8
+    ).cuda()
+    xs = (torch.rand(M, generator=gen) / 8 + 1e-4).cuda()
+    ws = (torch.rand(N, generator=gen) / 8 + 1e-4).cuda()
+    return x_q, xs, weight, ws
+
+
+@pytest.mark.parametrize("M", [64, 128])
+@pytest.mark.parametrize("K_N", [s[:2] for s in _DECODE_SHAPES],
+                         ids=[s[2] for s in _DECODE_SHAPES])
+@pytest.mark.parametrize("with_bias", [False, True])
+@needs_int_mm
+def test_decode_fused_bitidentical_to_cublas_chain(
+    monkeypatch, M, K_N, with_bias
+):
+    """VLLM_FL_INTMM_FUSED_DECODE toggles decode-tier fused vs cuBLAS chain
+    at the exact-M table points; must stay bit-equal on the bias-free path.
+    lm_head@M=64 is deliberately absent from the table (1.106x < gate) —
+    both arms take the chain there, a trivial pass that documents intent."""
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    K, N = K_N
+    x_q, xs, weight, ws = _raw_operands(M, K, N, seed=M)
+    bias = None
+    if with_bias:
+        gen = torch.Generator().manual_seed(M + 1)
+        bias = (torch.randn(N, generator=gen) * 0.1).to(torch.bfloat16).cuda()
+
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_DECODE", "1")
+    fused = int_mm_mod.int8_scaled_mm_int_mm(
+        x_q, weight, xs, ws, bias=bias, out_dtype=torch.bfloat16
+    )
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_DECODE", "0")
+    monkeypatch.setenv("VLLM_FL_INTMM_FUSED_GEMM", "0")
+    chain = int_mm_mod.int8_scaled_mm_int_mm(
+        x_q, weight, xs, ws, bias=bias, out_dtype=torch.bfloat16
+    )
+
+    assert fused.shape == (M, N)
+    _assert_bf16_matches_reference(fused, chain, bias)
+
+
+@needs_int_mm
+def test_decode_tier_routes_exact_m_only(monkeypatch):
+    """The decode fused tier must fire only at exact M=64/128 on table
+    shapes; every other decode size (17/32/72/96/255 — the cudagraph
+    capture grid around them) keeps the cuBLAS chain. Spied via the shared
+    launch body."""
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    K, N = 2048, 2560
+    real_launch = int_mm_mod._launch_fused_gemm
+    calls = []
+
+    def spy(x_q, weight, x_scale, weight_scale, bias, M, N_, K_, cfg):
+        calls.append((M, cfg))
+        return real_launch(
+            x_q, weight, x_scale, weight_scale, bias, M, N_, K_, cfg
+        )
+
+    monkeypatch.setattr(int_mm_mod, "_launch_fused_gemm", spy)
+    for M in (17, 32, 72, 96, 255):
+        x_q, xs, weight, ws = _raw_operands(M, K, N, seed=M)
+        out = int_mm_mod.int8_scaled_mm_int_mm(
+            x_q, weight, xs, ws, out_dtype=torch.bfloat16
+        )
+        assert out.shape == (M, N)
+        assert all(c[0] != M for c in calls), (
+            f"M={M} reached the fused launch; decode tier must be exact-M"
+        )
+    for M in (64, 128):
+        calls.clear()
+        x_q, xs, weight, ws = _raw_operands(M, K, N, seed=M)
+        int_mm_mod.int8_scaled_mm_int_mm(
+            x_q, weight, xs, ws, out_dtype=torch.bfloat16
+        )
+        want_cfg = int_mm_mod._FUSED_GEMM_DECODE_CONFIGS[(M, K, N)]
+        assert (M, want_cfg) in calls, (
+            f"M={M} did not route to the decode-tier config"
+        )
+
+
+@needs_int_mm
+def test_warm_key_distinguishes_decode_and_prefill_cfg():
+    """A warmed prefill specialization must not green-light an unwarmed
+    decode tile inside a cudagraph capture: Triton JIT compiles carry
+    device-side syncs, so the warm key carries the config tuple."""
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    K, N = 2048, 2560
+    int_mm_mod._FUSED_WARMED.clear()
+    try:
+        x_q, xs, weight, ws = _raw_operands(1024, K, N, seed=1)
+        int_mm_mod.int8_scaled_mm_int_mm(
+            x_q, weight, xs, ws, out_dtype=torch.bfloat16
+        )
+        prefill_cfg = int_mm_mod._FUSED_GEMM_CONFIGS[(K, N)]
+        assert (K, N, True, prefill_cfg) in int_mm_mod._FUSED_WARMED
+        decode_cfg = int_mm_mod._FUSED_GEMM_DECODE_CONFIGS[(64, K, N)]
+        assert decode_cfg != prefill_cfg
+        assert (K, N, True, decode_cfg) not in int_mm_mod._FUSED_WARMED
+
+        # Behavior: an M=64 call inside a fresh capture (decode tile never
+        # warmed) must fall back to the cuBLAS chain instead of compiling
+        # mid-capture, and the replayed graph must match the eager chain.
+        M = 64
+        x_q, xs, weight, ws = _raw_operands(M, K, N, seed=2)
+        eager = int_mm_mod.int8_scaled_mm_int_mm(
+            x_q, weight, xs, ws, out_dtype=torch.bfloat16
+        )
+        int_mm_mod._FUSED_WARMED.discard((K, N, True, decode_cfg))
+
+        def fn():
+            return int_mm_mod.int8_scaled_mm_int_mm(
+                x_q, weight, xs, ws, out_dtype=torch.bfloat16
+            )
+
+        s = torch.cuda.Stream()
+        s.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(s):
+            fn()  # stream warm-up of the chain kernels
+        torch.cuda.current_stream().wait_stream(s)
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g):
+            captured = fn()
+        torch.cuda.synchronize()
+        g.replay()  # capture only records; replay executes into `captured`
+        torch.cuda.synchronize()
+        assert torch.equal(captured, eager)
+    finally:
+        int_mm_mod._FUSED_WARMED.clear()
+
+
 @needs_int_mm
 def test_fused_gemm_survives_fullgraph_compile():
     """The fused branch hides inside the custom op boundary — dynamo must
