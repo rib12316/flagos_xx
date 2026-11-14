@@ -5,6 +5,22 @@
 > 性能 bench 与精度测试只在用户明确要求时才允许开测**；③run3 与 105 题已按令中止
 > （run1/2 数据有效）。
 
+## 九、极限榨取阶段收官增注（2026-11-14 深夜，Phase 5，P0-P5 全落地）
+
+P0-P5 全部执行完毕（commit fc99268..91864fd 已 push），终态与判决：
+
+- **上线**：P0 decode M=64/128 融合档（ITL −19.4%@M64）+ P1 lm_head int8
+  （ckpt `*-w8a8-v2`，−267MB，parity 0.9667）。
+- **判决**：P2 KV int8 受阻塞（attention 非带宽 bound——**本日最重要结构性
+  发现**，bf16 attention KV 有效带宽仅 ~120GB/s vs 829 天花板）；P3 W4A8 死案
+  （无原生 int4 路径，0.26×）；P4 前提证伪关案；P5 D0 复扫表不动。
+- **阻塞点分析全文**：`docs/d2-quant-blocking-analysis.md`（量化可用杠杆已
+  收干；attention 墙的下一杠杆是非量化 kernel 形态工程，建议下期）。
+- **基础栈风险**：EngineCore 负载退化-死亡全周期已刻画（b=1 干净 = 批路径
+  竞态；官方 run uptime <30min 在 ~60min 时钟内），详
+  `results/20261114_d2_conc128_stress/README.md`。
+- 台账：`results/d2-kernel-matrix.md` §6；预期官方增量 +3-6%（未验证，等令）。
+
 ---
 
 ## 一、结果总表（截至交付）

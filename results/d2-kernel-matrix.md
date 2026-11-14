@@ -111,3 +111,35 @@ int8 tl.dot int32 acc + 寄存器内 epilogue `(acc·xs)·ws` + bf16 单次写�
 1-kernel 融合（quant 前移）0.10-0.15× 死案；quant blocked 多行全负；skinny 三振
 （v1 无 split 输 2× / v2 atomic 位精确坑 / v3 两段归约 M=16 档 0.74-1.08×）；
 B 流 cache_modifier 本 backend 无效。
+
+## 6. Phase 5 追加（2026-11-14，极限榨取线）：decode 融合档 + lm_head int8 + 三个判决
+
+**P0 decode M=64/128 融合档**（`_FUSED_GEMM_DECODE_CONFIGS`，(M,K,N) 精确键，
+GROUP_M=1，BM∈{32,64,128} 小 tile——`_FUSED_GEMM_MIN_M=256` 是按 (256,256)
+大 tile 败绩设的偏保守门，phase0d 证伪）：
+
+| 项 | 终态 |
+|---|---|
+| 效率 vs 整链（graph 3×30 中位） | 9/10 点过 ≥1.15×：qkv 1.45×/o **1.62×**/down 1.56×（M=64），gate_up 1.16-1.22×；lm_head@64 1.106× 留链 |
+| serve 兑现 | ITL 中位 M=64 档 **−19.4%**（24.8→20.0ms）、M=128 −6.2%（差值 2.2ms 与逐层省时预测 2.07ms 吻合） |
+| 路由 | M∈{64,128} 精确集合 + (M,K,N) 表命中 → decode 融合；其余 decode 尺寸（24/40/72/…捕获档）保持 cuBLAS 链零扰动 |
+| warm 键 | (K,N,even_m,**cfg**)——防 prefill 暖键放行未编译 decode tile 进 capture |
+| env | `VLLM_FL_INTMM_FUSED_DECODE=0` 回退 |
+| 位精确 | 189 单测全绿（decode 档专项 +22：精确 M 路由/warm-key 区分/capture 回退行为） |
+
+**P1 lm_head int8**（ckpt `/workspace/MiniCPM5-2B-w8a8-v2`，targets 加 "lm_head"，
+ParallelLMHead 走同一 packed scheme/LinearMethod 路径，dispatch 零改动）：
+权重 535→268MB（池 +6080 tokens = 267MB/43KB-per-token 精确换算复现）；
+parity acc **0.9667**（>fake 0.9333）；ITL 效应 ~1-2%（贴烟测噪声底）；
+与 v1 唯一差异 = lm_head（968 共有张量逐位一致）。
+
+**三个判决**（详 docs/d2-quant-blocking-analysis.md）：
+- P2 KV int8_per_token_head：编译✓数值✓**时间✗**（decode 0.90×/prefill 0.726×）
+  ——bf16 attention KV 有效带宽仅 ~120GB/s（天花板 829）= 延迟/占用 bound，
+  带宽减半兑不成时间。受阻塞候选（env 默认 0），容量收益待官方 16K 验证。
+- P3 W4A8：0.24-0.26× 死案（无原生 int4 路径，解包税 4× > 带宽收益 2×）。
+- P4 int8 attention：收益前提被 P2 证伪，关案。P5 D0 复扫：表无漂移不动。
+
+**基础栈风险立档**：EngineCore 负载退化-死亡全周期（0.9333→0.47→静默死亡
+~60min；b=1 干净 = 批路径竞态，11-07 libentry 同签名），非 D2 引入；官方 run
+uptime <30min 在时钟内。parity sanity 必须在新鲜 serve 上跑（纪律修正）。
