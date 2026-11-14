@@ -4,6 +4,9 @@
 用法：
     python scripts/sweep_attn_launch.py                 # quick：计分形状（~3min）
     python scripts/sweep_attn_launch.py --full          # 全矩阵（~20-40min）
+    python scripts/sweep_attn_launch.py --kv int8       # P2 后：int8_per_token_head
+                                                        # KV 池（scale 走 strided
+                                                        # fp32 视图，head 128→132）
     python scripts/sweep_attn_launch.py --out results/xxx
 
 产出：
@@ -37,8 +40,41 @@ SEQ_THRESHOLD_3D = 64
 
 torch.manual_seed(0)
 
+KV_MODE = {"bf16": "auto", "int8": "int8_per_token_head"}
+KV_CURRENT = "bf16"
+
 
 # ------------------------------------------------------------------ 用例构造
+def _maybe_int8_pool(kv_bf16):
+    """bf16 池 [2, pages, BLOCK, NKV, HD] → int8 池（head pad 132）+ strided
+    fp32 scale 视图 + 量化写入（per-token-head absmax；数据用 torch 复刻，
+    扫的是 attention 读侧 launch，同数据上对比成立）。"""
+    if KV_CURRENT != "int8":
+        return kv_bf16[0].contiguous(), kv_bf16[1].contiguous(), {}
+    from vllm.v1.attention.backends.triton_attn import (
+        TritonAttentionBackend, TritonAttentionImpl,
+    )
+    from vllm.v1.kv_cache_interface import KVQuantMode
+    pages = kv_bf16.shape[1]
+    shape = TritonAttentionBackend.get_kv_cache_shape(
+        pages, BLOCK, NKV, HD, "int8_per_token_head")  # (blocks,2,BLOCK,NKV,132)
+    cache = torch.zeros(*shape, dtype=torch.int8, device=DEV)
+    impl = TritonAttentionImpl.__new__(TritonAttentionImpl)
+    impl._k_scale_cache = None
+    impl._ensure_scale_caches(cache)
+    for half in (0, 1):
+        src = kv_bf16[half]  # [pages, BLOCK, NKV, HD]
+        amax = src.abs().amax(dim=-1, keepdim=True).clamp_min(1e-12)
+        q = (src / amax * 127).round().clamp(-128, 127).to(torch.int8)
+        cache[:, half, ..., :HD].copy_(q)  # 基本索引切片 → strided copy_
+        sc = (amax / 127).squeeze(-1)  # [pages, BLOCK, NKV]
+        (impl._k_scale_cache if half == 0 else impl._v_scale_cache).copy_(sc)
+    k8, v8 = cache.unbind(1)
+    return k8, v8, dict(kv_quant_mode=KVQuantMode.INT8_PER_TOKEN_HEAD,
+                        k_scale_cache=impl._k_scale_cache,
+                        v_scale_cache=impl._v_scale_cache)
+
+
 def make_decode_case(bs, kv_len):
     q = torch.randn(bs, NH, HD, dtype=DTYPE, device=DEV)
     npages = (kv_len + BLOCK - 1) // BLOCK
@@ -50,13 +86,15 @@ def make_decode_case(bs, kv_len):
     so = torch.empty(SEQ_THRESHOLD_3D, NH, NSEG, HD, dtype=torch.float32, device=DEV)
     sm = torch.empty(SEQ_THRESHOLD_3D, NH, NSEG, dtype=torch.float32, device=DEV)
     se = torch.empty(SEQ_THRESHOLD_3D, NH, NSEG, dtype=torch.float32, device=DEV)
+    k8, v8, kv_kw = _maybe_int8_pool(kv)
     return dict(
-        q=q, k=kv[0], v=kv[1], out=out, cu_seqlens_q=cu, max_seqlen_q=1,
+        q=q, k=k8, v=v8, out=out, cu_seqlens_q=cu, max_seqlen_q=1,
         seqused_k=seqused, max_seqlen_k=kv_len, softmax_scale=HD**-0.5,
         causal=True, window_size=(-1, -1), block_table=bt, softcap=0.0,
         q_descale=None, k_descale=None, v_descale=None,
         seq_threshold_3D=SEQ_THRESHOLD_3D, num_par_softmax_segments=NSEG,
         softmax_segm_output=so, softmax_segm_max=sm, softmax_segm_expsum=se,
+        **kv_kw,
     ), out
 
 
@@ -69,14 +107,16 @@ def make_prefill_case(nseq, qlen, kv_len):
     cu = torch.arange(0, ntok + 1, qlen, dtype=torch.int32, device=DEV)
     seqused = torch.full((nseq,), kv_len, dtype=torch.int32, device=DEV)
     out = torch.empty(ntok, NH, HD, dtype=DTYPE, device=DEV)
+    k8, v8, kv_kw = _maybe_int8_pool(kv)
     return dict(
-        q=q, k=kv[0], v=kv[1], out=out, cu_seqlens_q=cu, max_seqlen_q=qlen,
+        q=q, k=k8, v=v8, out=out, cu_seqlens_q=cu, max_seqlen_q=qlen,
         seqused_k=seqused, max_seqlen_k=kv_len, softmax_scale=HD**-0.5,
         causal=True, window_size=(-1, -1), block_table=bt, softcap=0.0,
         q_descale=None, k_descale=None, v_descale=None,
         seq_threshold_3D=None, num_par_softmax_segments=None,
         softmax_segm_output=None, softmax_segm_max=None,
         softmax_segm_expsum=None,
+        **kv_kw,
     ), out
 
 
@@ -215,15 +255,20 @@ def bucket_kv(n):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--full", action="store_true", help="全矩阵（默认 quick 计分形状）")
+    ap.add_argument("--kv", choices=("bf16", "int8"), default="bf16",
+                    help="KV 池形态：int8 = int8_per_token_head（P2 落地后重调用）")
     ap.add_argument("--out", default=None, help="输出目录（默认 results/<ts>_launch_sweep）")
     args = ap.parse_args()
 
+    global KV_CURRENT
+    KV_CURRENT = args.kv
     neutralize_plugin_hook()
     ts = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
-    outdir = args.out or f"results/{ts}_launch_sweep"
+    outdir = args.out or f"results/{ts}_launch_sweep{'_kvint8' if args.kv == 'int8' else ''}"
     os.makedirs(outdir, exist_ok=True)
 
-    print(f"环境: {torch.cuda.get_device_name(0)}; ARMS={[a for a, _ in ARMS]}")
+    print(f"环境: {torch.cuda.get_device_name(0)}; kv={args.kv}; "
+          f"ARMS={[a for a, _ in ARMS]}")
     rows, best = [], []
     dcases = FULL_DECODE if args.full else QUICK_DECODE
     pcases = FULL_PREFILL if args.full else QUICK_PREFILL

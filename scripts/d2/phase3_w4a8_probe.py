@@ -151,7 +151,7 @@ def run():
                 print(f"  {tag} BM{BM} BN{BN} BK{BK} w{w_} s{st}: EXC "
                       f"{type(e).__name__} {str(e)[:80]}", flush=True)
         results.sort()
-        print(f"\n== {tag} K={K} N={N} M={M} | P0 int8 优胜 {t_p0}µs =="
+        print(f"\n== {tag} K={K} N={N} M={M} | P0 int8 优胜 {t_p0}µs ==",
               flush=True)
         if not results:
             print("  -> 全配置 FAIL（含 tl.interleave 支持性）→ no-go",
