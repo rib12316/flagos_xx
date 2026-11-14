@@ -155,7 +155,7 @@ def run():
             unified_attention(
                 q, kbf, vbf, out_bf, cu_q, q_len, seqused_k, kv_len,
                 softmax_scale=HD ** -0.5, causal=True, window_size=(-1, -1),
-                block_table=bt, softcap=None, q_descale=None, k_descale=None,
+                block_table=bt, softcap=0.0, q_descale=None, k_descale=None,
                 v_descale=None, kv_quant_mode=KVQuantMode.NONE,
                 k_scale_cache=None, v_scale_cache=None)
             return out_bf
@@ -164,7 +164,7 @@ def run():
             unified_attention(
                 q, k8, v8, out_i8, cu_q, q_len, seqused_k, kv_len,
                 softmax_scale=HD ** -0.5, causal=True, window_size=(-1, -1),
-                block_table=bt, softcap=None, q_descale=None, k_descale=None,
+                block_table=bt, softcap=0.0, q_descale=None, k_descale=None,
                 v_descale=None, kv_quant_mode=KVQuantMode.INT8_PER_TOKEN_HEAD,
                 k_scale_cache=ks, v_scale_cache=vs)
             return out_i8

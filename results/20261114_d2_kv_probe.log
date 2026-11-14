@@ -1,23 +1,23 @@
-INFO 11-14 20:37:36 [__init__.py:44] Available plugins for group vllm.platform_plugins:
-INFO 11-14 20:37:36 [__init__.py:46] - fl -> vllm_fl:register
-INFO 11-14 20:37:36 [__init__.py:58] Loading plugin fl
+INFO 11-14 22:43:06 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-14 22:43:06 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-14 22:43:06 [__init__.py:58] Loading plugin fl
 /usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:728: DeprecationWarning: use_cuda_graph is deprecated; use benchmark_mode='replay' or benchmark_mode='event'
   super().__init__(*args, **kwargs)
 /usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
   resolved_benchmark = resolve_benchmarker(
-INFO 11-14 20:37:45 [__init__.py:237] Platform plugin fl is activated
+INFO 11-14 22:43:15 [__init__.py:237] Platform plugin fl is activated
 /usr/local/lib/python3.12/site-packages/torch/jit/_script.py:362: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
   warnings.warn(
-/usr/local/lib/python3.12/subprocess.py:1127: ResourceWarning: subprocess 155516 is still running
+/usr/local/lib/python3.12/subprocess.py:1127: ResourceWarning: subprocess 182834 is still running
   _warn("subprocess %s is still running" % self.pid,
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-INFO 11-14 20:37:50 [utils.py:90] `_KV_CACHE_LAYOUT_OVERRIDE` variable detected. Setting KV cache layout to NHD.
+INFO 11-14 22:43:23 [utils.py:90] `_KV_CACHE_LAYOUT_OVERRIDE` variable detected. Setting KV cache layout to NHD.
 kv_cache_layout=NHD（NHD → get_kv_cache_shape 顺序即物理连续，探针布局与 serve 一致）
-Traceback (most recent call last):
-  File "/flagos_比赛/flagos_xx/scripts/d2/phase2_kv_probe.py", line 190, in <module>
-    run()
-  File "/flagos_比赛/flagos_xx/scripts/d2/phase2_kv_probe.py", line 143, in run
-    rel = (k_dq - key.to(torch.float32)).abs().max() \
-           ~~~~~^~~~~~~~~~~~~~~~~~~~~~~
-RuntimeError: The size of tensor a (16) must match the size of tensor b (131072) at non-singleton dimension 1
+[decode_kv2k] write dequant max_rel=0.0039 OK
+[decode_kv2k] S=64 q=1 kv=2048 | 数值 max_rel=0.0101 OK(≤3%) | bf16 1124.4µs (~119GB/s KV读) vs int8 1256.2µs = 0.895×
+[decode_kv16k] write dequant max_rel=0.0039 OK
+[decode_kv16k] S=64 q=1 kv=16384 | 数值 max_rel=0.0094 OK(≤3%) | bf16 8813.1µs (~122GB/s KV读) vs int8 9770.5µs = 0.902×
+[prefill_2k] write dequant max_rel=0.0039 OK
+[prefill_2k] S=2 q=2048 kv=2048 | 数值 max_rel=0.0116 OK(≤3%) | bf16 10335.9µs (~0GB/s KV读) vs int8 14232.5µs = 0.726×
+PROBE DONE
 sys:1: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
