@@ -1,0 +1,209 @@
+shape,arm,us
+decode bs=8 kv=1024,auto,146.3
+decode bs=8 kv=1024,w1s1,104.1
+decode bs=8 kv=1024,w1s2,102.8
+decode bs=8 kv=1024,w1s3,122.1
+decode bs=8 kv=1024,w2s1,189.1
+decode bs=8 kv=1024,w2s2,131.1
+decode bs=8 kv=1024,w2s3,113.8
+decode bs=8 kv=1024,w4s1,108.4
+decode bs=8 kv=1024,w4s2,100.8
+decode bs=8 kv=1024,w4s3,104.5
+decode bs=8 kv=1024,w8s1,114.6
+decode bs=8 kv=1024,w8s2,168.7
+decode bs=8 kv=1024,w8s3,154.7
+decode bs=16 kv=1024,auto,143.7
+decode bs=16 kv=1024,w1s1,113.1
+decode bs=16 kv=1024,w1s2,151.6
+decode bs=16 kv=1024,w1s3,216.1
+decode bs=16 kv=1024,w2s1,167.2
+decode bs=16 kv=1024,w2s2,130.7
+decode bs=16 kv=1024,w2s3,161.9
+decode bs=16 kv=1024,w4s1,169.3
+decode bs=16 kv=1024,w4s2,138.5
+decode bs=16 kv=1024,w4s3,147.2
+decode bs=16 kv=1024,w8s1,158.2
+decode bs=16 kv=1024,w8s2,183.0
+decode bs=16 kv=1024,w8s3,215.3
+decode bs=16 kv=16384,auto,1567.9
+decode bs=16 kv=16384,w1s1,978.8
+decode bs=16 kv=16384,w1s2,2437.2
+decode bs=16 kv=16384,w1s3,2965.1
+decode bs=16 kv=16384,w2s1,1018.9
+decode bs=16 kv=16384,w2s2,1463.9
+decode bs=16 kv=16384,w2s3,2051.9
+decode bs=16 kv=16384,w4s1,1224.0
+decode bs=16 kv=16384,w4s2,1383.2
+decode bs=16 kv=16384,w4s3,1586.9
+decode bs=16 kv=16384,w8s1,1770.2
+decode bs=16 kv=16384,w8s2,2148.4
+decode bs=16 kv=16384,w8s3,2350.8
+decode bs=32 kv=4096,auto,858.1
+decode bs=32 kv=4096,w1s1,482.9
+decode bs=32 kv=4096,w1s2,1013.5
+decode bs=32 kv=4096,w1s3,1545.3
+decode bs=32 kv=4096,w2s1,507.7
+decode bs=32 kv=4096,w2s2,748.2
+decode bs=32 kv=4096,w2s3,1078.0
+decode bs=32 kv=4096,w4s1,604.2
+decode bs=32 kv=4096,w4s2,721.5
+decode bs=32 kv=4096,w4s3,854.3
+decode bs=32 kv=4096,w8s1,923.1
+decode bs=32 kv=4096,w8s2,1110.9
+decode bs=32 kv=4096,w8s3,1254.4
+decode bs=32 kv=16384,auto,3118.6
+decode bs=32 kv=16384,w1s1,1772.9
+decode bs=32 kv=16384,w1s2,3852.0
+decode bs=32 kv=16384,w1s3,5897.7
+decode bs=32 kv=16384,w2s1,1893.9
+decode bs=32 kv=16384,w2s2,2655.3
+decode bs=32 kv=16384,w2s3,3983.4
+decode bs=32 kv=16384,w4s1,2261.7
+decode bs=32 kv=16384,w4s2,2661.4
+decode bs=32 kv=16384,w4s3,3133.5
+decode bs=32 kv=16384,w8s1,3423.5
+decode bs=32 kv=16384,w8s2,4150.5
+decode bs=32 kv=16384,w8s3,4624.5
+decode bs=64 kv=4096,auto,1701.9
+decode bs=64 kv=4096,w1s1,953.9
+decode bs=64 kv=4096,w1s2,1950.7
+decode bs=64 kv=4096,w1s3,2956.4
+decode bs=64 kv=4096,w2s1,1000.3
+decode bs=64 kv=4096,w2s2,1382.9
+decode bs=64 kv=4096,w2s3,2027.4
+decode bs=64 kv=4096,w4s1,1178.1
+decode bs=64 kv=4096,w4s2,1411.8
+decode bs=64 kv=4096,w4s3,1696.6
+decode bs=64 kv=4096,w8s1,1822.6
+decode bs=64 kv=4096,w8s2,2165.6
+decode bs=64 kv=4096,w8s3,2515.9
+decode bs=64 kv=16384,auto,6235.3
+decode bs=64 kv=16384,w1s1,3379.5
+decode bs=64 kv=16384,w1s2,7231.7
+decode bs=64 kv=16384,w1s3,11159.0
+decode bs=64 kv=16384,w2s1,3677.2
+decode bs=64 kv=16384,w2s2,5067.6
+decode bs=64 kv=16384,w2s3,7593.5
+decode bs=64 kv=16384,w4s1,4403.3
+decode bs=64 kv=16384,w4s2,5229.4
+decode bs=64 kv=16384,w4s3,6235.3
+decode bs=64 kv=16384,w8s1,6763.5
+decode bs=64 kv=16384,w8s2,8094.0
+decode bs=64 kv=16384,w8s3,9161.2
+decode bs=128 kv=4096,auto,3480.4
+decode bs=128 kv=4096,w1s1,3497.6
+decode bs=128 kv=4096,w1s2,3485.1
+decode bs=128 kv=4096,w1s3,3512.2
+decode bs=128 kv=4096,w2s1,3526.1
+decode bs=128 kv=4096,w2s2,3513.0
+decode bs=128 kv=4096,w2s3,3497.6
+decode bs=128 kv=4096,w4s1,3496.9
+decode bs=128 kv=4096,w4s2,3487.4
+decode bs=128 kv=4096,w4s3,3481.1
+decode bs=128 kv=4096,w8s1,3485.7
+decode bs=128 kv=4096,w8s2,3488.7
+decode bs=128 kv=4096,w8s3,3511.5
+decode bs=128 kv=16384,auto,13796.9
+decode bs=128 kv=16384,w1s1,13784.4
+decode bs=128 kv=16384,w1s2,13793.7
+decode bs=128 kv=16384,w1s3,13873.8
+decode bs=128 kv=16384,w2s1,13899.0
+decode bs=128 kv=16384,w2s2,13928.3
+decode bs=128 kv=16384,w2s3,13927.5
+decode bs=128 kv=16384,w4s1,13877.3
+decode bs=128 kv=16384,w4s2,13824.1
+decode bs=128 kv=16384,w4s3,13801.1
+decode bs=128 kv=16384,w8s1,13819.7
+decode bs=128 kv=16384,w8s2,13865.5
+decode bs=128 kv=16384,w8s3,13859.8
+decode bs=128 kv=32768,auto,27634.1
+decode bs=128 kv=32768,w1s1,27683.9
+decode bs=128 kv=32768,w1s2,27700.9
+decode bs=128 kv=32768,w1s3,27541.2
+decode bs=128 kv=32768,w2s1,27559.9
+decode bs=128 kv=32768,w2s2,27583.2
+decode bs=128 kv=32768,w2s3,27569.0
+decode bs=128 kv=32768,w4s1,27512.3
+decode bs=128 kv=32768,w4s2,27585.4
+decode bs=128 kv=32768,w4s3,27559.8
+decode bs=128 kv=32768,w8s1,27493.7
+decode bs=128 kv=32768,w8s2,27538.1
+decode bs=128 kv=32768,w8s3,27513.7
+prefill bs=1 kv=4096 q=4096,auto,20400.6
+prefill bs=1 kv=4096 q=4096,w1s1,17196.5
+prefill bs=1 kv=4096 q=4096,w1s2,27195.5
+prefill bs=1 kv=4096 q=4096,w1s3,46744.5
+prefill bs=1 kv=4096 q=4096,w2s1,13631.5
+prefill bs=1 kv=4096 q=4096,w2s2,17992.8
+prefill bs=1 kv=4096 q=4096,w2s3,29022.5
+prefill bs=1 kv=4096 q=4096,w4s1,14412.5
+prefill bs=1 kv=4096 q=4096,w4s2,14735.8
+prefill bs=1 kv=4096 q=4096,w4s3,20451.2
+prefill bs=1 kv=4096 q=4096,w8s1,20003.7
+prefill bs=1 kv=4096 q=4096,w8s2,19986.3
+prefill bs=1 kv=4096 q=4096,w8s3,24116.4
+prefill bs=2 kv=4096 q=2048,auto,30205.2
+prefill bs=2 kv=4096 q=2048,w1s1,25438.3
+prefill bs=2 kv=4096 q=2048,w1s2,40457.9
+prefill bs=2 kv=4096 q=2048,w1s3,68833.7
+prefill bs=2 kv=4096 q=2048,w2s1,20237.9
+prefill bs=2 kv=4096 q=2048,w2s2,26712.4
+prefill bs=2 kv=4096 q=2048,w2s3,42897.7
+prefill bs=2 kv=4096 q=2048,w4s1,20901.1
+prefill bs=2 kv=4096 q=2048,w4s2,21793.9
+prefill bs=2 kv=4096 q=2048,w4s3,30017.5
+prefill bs=2 kv=4096 q=2048,w8s1,29733.8
+prefill bs=2 kv=4096 q=2048,w8s2,29838.2
+prefill bs=2 kv=4096 q=2048,w8s3,35833.6
+prefill bs=4 kv=4096 q=2048,auto,60026.0
+prefill bs=4 kv=4096 q=2048,w1s1,50421.5
+prefill bs=4 kv=4096 q=2048,w1s2,79821.2
+prefill bs=4 kv=4096 q=2048,w1s3,136246.0
+prefill bs=4 kv=4096 q=2048,w2s1,39864.7
+prefill bs=4 kv=4096 q=2048,w2s2,52715.1
+prefill bs=4 kv=4096 q=2048,w2s3,85360.4
+prefill bs=4 kv=4096 q=2048,w4s1,41482.9
+prefill bs=4 kv=4096 q=2048,w4s2,43301.9
+prefill bs=4 kv=4096 q=2048,w4s3,59998.8
+prefill bs=4 kv=4096 q=2048,w8s1,59561.3
+prefill bs=4 kv=4096 q=2048,w8s2,60129.5
+prefill bs=4 kv=4096 q=2048,w8s3,72239.6
+prefill bs=8 kv=4096 q=1024,auto,69721.1
+prefill bs=8 kv=4096 q=1024,w1s1,58834.6
+prefill bs=8 kv=4096 q=1024,w1s2,94278.1
+prefill bs=8 kv=4096 q=1024,w1s3,158552.5
+prefill bs=8 kv=4096 q=1024,w2s1,46501.4
+prefill bs=8 kv=4096 q=1024,w2s2,61883.3
+prefill bs=8 kv=4096 q=1024,w2s3,99684.3
+prefill bs=8 kv=4096 q=1024,w4s1,48472.7
+prefill bs=8 kv=4096 q=1024,w4s2,50733.5
+prefill bs=8 kv=4096 q=1024,w4s3,69845.7
+prefill bs=8 kv=4096 q=1024,w8s1,69783.0
+prefill bs=8 kv=4096 q=1024,w8s2,70203.2
+prefill bs=8 kv=4096 q=1024,w8s3,85297.8
+prefill bs=8 kv=16384 q=1024,auto,307615.1
+prefill bs=8 kv=16384 q=1024,w1s1,259779.3
+prefill bs=8 kv=16384 q=1024,w1s2,417289.0
+prefill bs=8 kv=16384 q=1024,w1s3,701618.3
+prefill bs=8 kv=16384 q=1024,w2s1,204594.3
+prefill bs=8 kv=16384 q=1024,w2s2,273944.9
+prefill bs=8 kv=16384 q=1024,w2s3,441040.6
+prefill bs=8 kv=16384 q=1024,w4s1,215400.1
+prefill bs=8 kv=16384 q=1024,w4s2,223370.6
+prefill bs=8 kv=16384 q=1024,w4s3,307661.7
+prefill bs=8 kv=16384 q=1024,w8s1,304370.8
+prefill bs=8 kv=16384 q=1024,w8s2,308542.9
+prefill bs=8 kv=16384 q=1024,w8s3,377061.5
+prefill bs=2 kv=16384 q=4096,auto,277417.8
+prefill bs=2 kv=16384 q=4096,w1s1,235412.6
+prefill bs=2 kv=16384 q=4096,w1s2,368954.9
+prefill bs=2 kv=16384 q=4096,w1s3,626320.4
+prefill bs=2 kv=16384 q=4096,w2s1,186411.3
+prefill bs=2 kv=16384 q=4096,w2s2,243132.9
+prefill bs=2 kv=16384 q=4096,w2s3,393851.4
+prefill bs=2 kv=16384 q=4096,w4s1,193139.3
+prefill bs=2 kv=16384 q=4096,w4s2,202385.3
+prefill bs=2 kv=16384 q=4096,w4s3,277717.0
+prefill bs=2 kv=16384 q=4096,w8s1,276379.5
+prefill bs=2 kv=16384 q=4096,w8s2,275582.6
+prefill bs=2 kv=16384 q=4096,w8s3,341543.2
