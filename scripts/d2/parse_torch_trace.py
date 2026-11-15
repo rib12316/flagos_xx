@@ -26,7 +26,8 @@ def bucket(name: str) -> str:
         return "Q_quant_bare"
     if "epilogue" in n:
         return "E_epi_fused"
-    if "int_mm" in n or ("gemm" in n and "int8" in n) or "igemm" in n:
+    if "int_mm" in n or ("gemm" in n and "int8" in n) or "igemm" in n \
+            or "w8a8_fused" in n:
         return "M_int8_gemm"
     if "attn" in n or "attention" in n or "flash" in n or "flashfwd" in n or "paged" in n:
         return "A_attention"

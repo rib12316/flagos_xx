@@ -111,6 +111,12 @@ def run():
         x @ x
     torch.cuda.synchronize()
 
+    # serve 等效口径：装载 D0 launch 表（decode w1s1 / prefill w2s1）——两臂同表
+    # 公平。不装则测的是未调优 kernel，比值结论会失真（bottleneck_probe 教训）。
+    from vllm_fl.dispatch.backends.vendor.iluvatar import attn_launch_config as alc
+    alc.install()  # type: ignore[attr-defined]
+    print("launch 表已装载（decode w1s1/prefill w2s1，双臂同表）", flush=True)
+
     for tag, S, q_len, kv_len in CASES:
         q, key, val, cu_q, seqused_k, bt, sm, n_blocks = build_case(
             S, q_len, kv_len, seed=hash(tag) % 10000)

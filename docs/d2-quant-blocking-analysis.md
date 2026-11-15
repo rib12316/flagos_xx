@@ -41,11 +41,15 @@ P2 探针（graph 3×30 中位，原生 int8_per_token_head 全可读 Triton 路
 | decode S=64 kv=16K | 8813µs | 9771µs | 0.902× | **122GB/s** |
 | prefill S=2 q=2K | 10336µs | 14233µs | **0.726×** | — |
 
-- **要害**：bf16 attention 的 KV 有效带宽仅 ~120GB/s（本机读流天花板 829GB/s，
-  16.6GB HBM 的 ~14%）——GQA 2 kv-heads × 16 SM 形态下 decode attention 是
-  **延迟/占用 bound**（每 program KV 循环串行 + softmax 累积链），不是带宽 bound。
-  「KV 字节减半」兑不成时间；dequant ALU + per-token-head scale 装载 + head
-  132 非幂步长的税反而显性化（prefill -27% 与旧 F9「-25%」跨路径互证）。
+- **要害**：bf16 attention 的 KV 有效带宽远低于天花板——**未调优 launch 口径
+  ~120GB/s、serve 等效口径（D0 表 w1s1）193-197GB/s = 实用带宽（544GB/s 元素
+  参照）的 36%**（原始 829GB/s 天花板的 23%）——GQA 2 kv-heads × 16 SM 形态下
+  decode attention 是**延迟/占用 bound**（每 program KV 循环串行 + softmax
+  累积链），不是带宽 bound。「KV 字节减半」兑不成时间；dequant ALU +
+  per-token-head scale 装载 + head 132 非幂步长的税反而显性化（prefill -18%
+  调优口径 / -27% 未调优口径，与旧 F9「-25%」跨路径互证）。
+  **serve 等效 launch 下双臂复测：decode 0.929×/0.925×、prefill 0.820×——
+  判决在调优口径下成立（详见 docs/d2-bottleneck-diagnosis.md §三）。**
 - **推论封死 P4**：int8 attention 自研（Q·K/V 进 int8）的收益叙事同样是
   「读带宽减半」——同一前提，同一免疫。
 - **KV int8 唯一残存收益 = 容量**（池 tokens ×1.94，582K→1.13M）：官方 16K
