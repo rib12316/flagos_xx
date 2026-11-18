@@ -1,0 +1,15 @@
+tag,S,q_len,kv_len,path_req,path_eff,segments,use_td,num_warps,num_stages,time_us,kv_read_bytes,read_ref_us,GBps_attn,GBps_ref,pct_of_ref,pct_of_829,T_MACs,pct_of_118,verdict
+ptd S1 q4096 kv4k td0,1,4096,4096,2d,2d,1,0,2,1,13654.5,4194304,144.2,0,29,1,0,5.03,4,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S1 q4096 kv4k td1,1,4096,4096,2d,2d,1,1,2,1,12419.5,4194304,144.4,0,29,1,0,5.53,5,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S4 q4096 kv4k td0,4,4096,4096,2d,2d,1,0,2,1,53842.4,16777216,44.7,0,375,0,0,5.11,4,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S4 q4096 kv4k td1,4,4096,4096,2d,2d,1,1,2,1,48082.1,16777216,44.5,0,377,0,0,5.72,5,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S1 q2048 kv16k td0,1,2048,16384,2d,2d,1,0,2,1,50706.1,16777216,44.0,0,381,0,0,2.71,2,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S1 q2048 kv16k td1,1,2048,16384,2d,2d,1,1,2,1,44425.4,16777216,44.0,0,381,0,0,3.09,3,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S8 q1024 kv16k td0,8,1024,16384,2d,2d,1,0,2,1,205149.2,134217728,381.7,1,352,0,0,2.68,2,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S8 q1024 kv16k td1,8,1024,16384,2d,2d,1,1,2,1,183204.2,134217728,381.5,1,352,0,0,3.00,3,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S2 q2048 kv4k td0,2,2048,4096,2d,2d,1,0,2,1,20121.1,8388608,32.1,0,261,0,0,3.42,3,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+ptd S2 q2048 kv4k td1,2,2048,4096,2d,2d,1,1,2,1,19996.4,8388608,32.1,0,262,0,0,3.44,3,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+tseg bs64 kv8k n8 td1,64,1,8192,3d,3d,8,1,1,1,1392.6,536870912,1913.1,386,281,137,47,1.54,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+tseg bs64 kv4k n8 td1,64,1,4096,3d,3d,8,1,1,1,731.0,268435456,755.5,367,355,103,44,1.47,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+tseg bs16 kv8k n32 td1,16,1,8192,3d,3d,32,1,1,1,377.5,134217728,381.7,356,352,101,43,1.42,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+tseg bs64 kv32k n32 td1,64,1,32768,3d,3d,32,1,1,1,5188.7,2147483648,6397.8,414,336,123,50,1.66,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）

@@ -1,0 +1,7 @@
+[2026-11-12T23:49:03+08:00] arm1: w8a8
+(EngineCore pid=130323) INFO 11-12 23:50:45 [kv_cache_utils.py:2146] GPU KV cache size: 582,336 tokens
+== w8a8 bench done ==
+[2026-11-13T00:08:05+08:00] arm2: bf16
+(EngineCore pid=140599) INFO 11-13 00:09:42 [kv_cache_utils.py:2146] GPU KV cache size: 521,840 tokens
+== bf16 bench done ==
+[2026-11-13T00:27:36+08:00] ALL DONE
