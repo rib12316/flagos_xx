@@ -30,3 +30,7 @@ Thumbs.db
 *.trace.json
 *.chrome.trace
 d4-metax-port.bundle
+
+# 双机协作期间的本地产物（submit 包可由脚本再生成；ipynb 检查点为陈旧副本）
+.ipynb_checkpoints/
+submit_pkg/
