@@ -89,6 +89,11 @@ def install() -> bool:
                 out = top_p_filter_fast(logits, p)
                 if out is not None:
                     stats["n"] += 1
+                    if stats["n"] % 1000 == 0:
+                        logger.info(
+                            "sample_fast_path: 快路径命中 %d 次 / 回退 %d 次"
+                            "（回退=该批分布 top-%d 质量<p，走位精确慢路，正确性无损）",
+                            stats["n"], stats["fallback"], _K)
                     return out
                 stats["fallback"] += 1
             except Exception as e:  # 快路径异常不致命
