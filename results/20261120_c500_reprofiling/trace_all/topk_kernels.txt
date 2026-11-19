@@ -1,0 +1,26 @@
+total_kernel_ms=28914.7
+  7212.17ms   8216x sweep
+  6009.58ms   1027x compute_global_hist_kernel
+  4454.43ms  42924x void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 16, 16, 1, true, true, mctlass::bfloat16_t, 128, Fl
+  1636.64ms 115920x void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMultistage<mc
+  1590.26ms 173563x _dynamic_per_token_quant_int8_bare_kernel
+  1133.36ms  39723x void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMultistage<mc
+   916.39ms   2772x void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMultistage<mc
+   783.07ms   1047x _scatter_jit_function
+   625.70ms   1428x void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, true, true, mctlass::bfloat16_t, 128, F
+   437.79ms   2688x void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMultistage<mc
+   423.18ms  39438x void flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<128, 16, 16, 1, true, true, mctlass::bfloat16_t,
+   408.66ms   1302x void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 64, 64, 4, true, true, mctlass::bfloat16_t, 128, Fl
+   331.73ms  43134x triton_red_fused_fused_add_rms_norm_2
+   325.75ms  43134x triton_poi_fused_1
+   288.69ms  43134x triton_red_fused_fused_add_rms_norm_0
+   244.74ms  42107x triton_poi_fused_cat_3
+   233.65ms  43134x void vllm::reshape_and_cache_flash_kernel<__maca_bfloat16, __maca_bfloat16, (vllm::Fp8KVCacheDataType)0>(__mac
+   204.07ms   2688x void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMultistage<mc
+   192.30ms  46074x _copy_kernel_kernel_rank_3
+   189.80ms  42107x triton_poi_fused_cat_4
+   180.03ms   2730x void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMultistage<mc
+   171.62ms   2054x softmax_kernel_inner
+   146.33ms    294x void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 16, 16, 1, true, true, mctlass::bfloat16_t, 128, Fl
+    94.81ms   1027x argmax_kernel_inner
+    72.39ms   1027x true_div_func_kernel_rank_2
