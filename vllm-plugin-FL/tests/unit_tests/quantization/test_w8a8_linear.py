@@ -242,9 +242,16 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
     ]
     kernel.process_weights_after_loading(layer)
 
-    assert layer.weight.shape == (4, 3)
-    assert layer.weight.stride() == (3, 1)
-    assert torch.equal(layer.weight, checkpoint_weight.t().contiguous())
+    IS_METAX = "metax" in torch.__version__.lower()
+    if IS_METAX:
+        # 沐曦 mctlass 栈：unpack 天然 [N,K] 布局直存（w8a8/mctlass_mm.py）
+        assert layer.weight.shape == (3, 4)
+        assert layer.weight.stride() == (4, 1)
+        assert torch.equal(layer.weight, checkpoint_weight.contiguous())
+    else:
+        assert layer.weight.shape == (4, 3)
+        assert layer.weight.stride() == (3, 1)
+        assert torch.equal(layer.weight, checkpoint_weight.t().contiguous())
     assert layer.weight_scale.shape == (3,)
     assert layer.weight_scale.dtype == torch.float32
     assert torch.equal(layer.weight_scale, checkpoint_scale.reshape(-1))
@@ -266,9 +273,12 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
     ):
         assert x_q.shape == (2, 4)
         assert x_scale.shape == (2, 1)
-        assert weight.shape == (4, 3)
+        assert weight.shape == ((3, 4) if IS_METAX else (4, 3))
         assert weight_scale.shape == (3,)
-        accumulator = x_q.to(torch.int32) @ weight.to(torch.int32)
+        operand = (
+            weight.to(torch.int32).t() if IS_METAX else weight.to(torch.int32)
+        )
+        accumulator = x_q.to(torch.int32) @ operand
         output = accumulator.to(torch.float32) * x_scale * weight_scale.reshape(1, -1)
         if bias is not None:
             output += bias.reshape(1, -1)

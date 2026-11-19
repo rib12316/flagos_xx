@@ -217,6 +217,13 @@ _FUSED_GEMM_DECODE_CONFIGS = {
 }
 _FUSED_GEMM_DECODE_BROKEN = False  # memoized off-switch, decode tier only
 
+# MetaX C500：融合档共享内存超限（prefill 256×256 tile 需 67584B > 65536B 上限，
+# 降档后 0.25-0.31×；decode M64 0.53×）且本卡 W8A8 主路径已由 mctlassEx 承载
+# （见 mctlass_mm.py）——直接清空两表，防 OutOfResources 触发 BROKEN 连坐。
+if "metax" in torch.__version__.lower():
+    _FUSED_GEMM_CONFIGS = {}
+    _FUSED_GEMM_DECODE_CONFIGS = {}
+
 
 def _fused_gemm_enabled() -> bool:
     """Fused single-kernel GEMM+epilogue toggle (on by default)."""

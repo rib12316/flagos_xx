@@ -451,14 +451,165 @@ def run_dtile_suite(out_dir):
     print("DTILE_DONE", flush=True)
 
 
+# ⑥/§12.4/§13.4：segm32 三点复测（P1 生死判据）+ 自研 splitkv kernel probe
+SEGM32_P1_POINTS = [16500, 17000, 17408]     # §13.2: kv 三点平均再判 P0'
+SEGM32_SHAPES = [(32, 16384), (64, 16384), (64, 4096),      # §3 四行之三
+                 (32, 17408), (40, 16384), (40, 17408)]     # §12.2 精确形态
+SKV_SHAPES = [(32, 16384), (32, 17408), (40, 16384), (40, 17408),
+              (64, 16384), (64, 4096)]
+
+
+def run_segm32_suite(out_dir):
+    """⑫.A（§12.4 交付 + §13.4 缩减版任务 A）：TD 态 n16/n32 段数对照 +
+    P1 三点复测（kv∈{16500,17000,17408} 平均，判 P0' 生死）。
+    全 graph 口径、TD=on、w1s1（alc 表注入）——与 §12.1/§13.1 数据同口径。"""
+    p = os.path.join(out_dir, "segm32_sweep.csv")
+    done = load_done(p)
+    new_file = not os.path.exists(p)
+    pts = {}
+    with open(p, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=COLUMNS)
+        if new_file:
+            writer.writeheader()
+        cases = ([(bs, kv) for bs in (32, 33) for kv in SEGM32_P1_POINTS]
+                 + SEGM32_SHAPES)
+        for bs, kv in cases:
+            for seg in (16, 32):
+                tag = f"s32 bs{bs} kv{kv} n{seg}"
+                if tag in done:
+                    print(f"[skip] {tag}", flush=True)
+                    continue
+                call, by, eff = attn_case5(bs, 1, kv, "3d", seg, True)
+                t = bp.graph_time_us(call, iters=30)
+                del call
+                gb_a = by / t * 1e-3
+                macs = bs * kv * NH * HD * 2 / (t * 1e-6) / 1e12
+                w_, s_ = hook_cfg(bs, 1, kv, eff) or ("", "")
+                row = dict(tag=tag, S=bs, q_len=1, kv_len=kv, path_req="3d-segm32",
+                           path_eff=eff, segments=seg, use_td=1,
+                           num_warps=w_, num_stages=s_, time_us=f"{t:.1f}",
+                           kv_read_bytes=by, GBps_attn=f"{gb_a:.0f}",
+                           pct_of_829=f"{gb_a / BW_CEIL * 100:.0f}",
+                           T_MACs=f"{macs:.2f}",
+                           pct_of_118=f"{macs / MAC_CEIL * 100:.0f}",
+                           verdict="")
+                writer.writerow(row)
+                f.flush()
+                os.fsync(f.fileno())
+                pts.setdefault((bs, seg), []).append(t)
+                print(f"[segm32] {tag:<26} {t:>9.1f}µs {gb_a:>5.0f}GB/s",
+                      flush=True)
+                torch.cuda.empty_cache()
+    # ---- P1 判据输出：三点平均 n16 vs n32（§13.2：平均口径，16384 单点不算）----
+    print("=" * 72, flush=True)
+    for bs in (32, 33):
+        a16 = pts.get((bs, 16)) or []
+        a32 = pts.get((bs, 32)) or []
+        if a16 and a32:
+            m16, m32 = statistics.mean(a16), statistics.mean(a32)
+            better = "n32" if m32 < m16 else "n16"
+            ratio = m16 / m32 if m32 < m16 else m32 / m16
+            print(f"[P1] bs{bs} 三点平均: n16={m16:.1f}µs  n32={m32:.1f}µs  "
+                  f"→ {better} 优 ({ratio:.3f}x)  "
+                  f"{'P0继续判活' if (bs == 32 and m32 < m16 * 0.97) or (bs == 33 and m32 < m16 * 0.97) else '按§13.2形态依赖默认不做'}",
+                  flush=True)
+    print("SEGM32_DONE", flush=True)
+
+
+def run_splitkv_suite(out_dir, variants="0,1,2,3"):
+    """⑥ 任务 B probe：VLLM_FL_ATTN_SPLITKV 路由下的形态复测（§7/§12.4）。
+    arm=-1 为上游 3D TD n16 基线（对照臂）；0-3 为 §13.3 变体。
+    判据（§13.3.4）：官方形态（bs32-40/kv16.4-17.4K 平均）≥1.15× vs 基线；
+    kv=16384 单点是波形伪影区不作判据。"""
+    os.environ["VLLM_FL_ATTN_SPLITKV"] = "1"
+    from vllm_fl.dispatch.backends.vendor.iluvatar import attn_splitkv as skv
+    skv.install()
+    arms = [-1] + [int(v) for v in str(variants).split(",") if v.strip()]
+    p = os.path.join(out_dir, "splitkv_probe.csv")
+    cols = COLUMNS + ["variant", "routed"]
+    done = load_done(p)
+    new_file = not os.path.exists(p)
+    res = {}
+    with open(p, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=cols)
+        if new_file:
+            writer.writeheader()
+        for bs, kv in SKV_SHAPES:
+            for arm in arms:
+                tag = f"skv bs{bs} kv{kv} v{'base' if arm < 0 else arm}"
+                if tag in done:
+                    print(f"[skip] {tag}", flush=True)
+                    continue
+                if arm < 0:
+                    skv.set_active(False)
+                    skv.set_variant(None)
+                else:
+                    skv.set_active(True)
+                    skv.set_variant(arm)
+                r0 = skv._route_stats["routed"]
+                try:
+                    call, by, eff = attn_case5(bs, 1, kv, "3d", DEFAULT_SEG, True)
+                    t = bp.graph_time_us(call, iters=30)
+                    del call
+                    routed = skv._route_stats["routed"] > r0
+                    gb_a = by / t * 1e-3
+                    macs = bs * kv * NH * HD * 2 / (t * 1e-6) / 1e12
+                    row = dict(tag=tag, S=bs, q_len=1, kv_len=kv,
+                               path_req="3d-splitkv", path_eff=eff,
+                               segments=DEFAULT_SEG, use_td=1,
+                               num_warps=1, num_stages=1, time_us=f"{t:.1f}",
+                               kv_read_bytes=by, GBps_attn=f"{gb_a:.0f}",
+                               pct_of_829=f"{gb_a / BW_CEIL * 100:.0f}",
+                               T_MACs=f"{macs:.2f}",
+                               pct_of_118=f"{macs / MAC_CEIL * 100:.0f}",
+                               verdict="",
+                               variant=("base" if arm < 0 else arm),
+                               routed=int(routed))
+                    res[(bs, kv, arm)] = t
+                except Exception as e:
+                    row = {c: "" for c in cols}
+                    row.update(tag=tag, S=bs, q_len=1, kv_len=kv,
+                               path_req="3d-splitkv", use_td=1,
+                               variant=("base" if arm < 0 else arm), routed=0,
+                               verdict=f"ERROR: {type(e).__name__}: "
+                                       f"{str(e)[:120]}")
+                finally:
+                    skv.set_active(None)
+                    skv.set_variant(None)
+                writer.writerow(row)
+                f.flush()
+                os.fsync(f.fileno())
+                print(f"[splitkv] {tag:<24} {row.get('time_us',''):>9}µs "
+                      f"{row.get('GBps_attn',''):>6}GB/s routed={row.get('routed')}",
+                      flush=True)
+                torch.cuda.empty_cache()
+    # ---- §13.3.4 判据输出：官方形态平均 vs base ----
+    print("=" * 72, flush=True)
+    official = [(32, 17408), (40, 16384), (40, 17408)]  # 16.4-17.4K（16384 单点不计）
+    for arm in arms:
+        if arm < 0:
+            continue
+        base = [res.get((bs, kv, -1)) for bs, kv in official]
+        cand = [res.get((bs, kv, arm)) for bs, kv in official]
+        if all(x is not None for x in base) and all(x is not None for x in cand):
+            mb, mc = statistics.mean(base), statistics.mean(cand)
+            verdict = "PASS ≥1.15x" if mc <= mb / 1.15 else "FAIL"
+            print(f"[T1] variant={arm}: 官方形态平均 base={mb:.1f}µs "
+                  f"cand={mc:.1f}µs 加速 {mb / mc:.3f}x → {verdict}", flush=True)
+    print("SPLITKV_DONE", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--suite", choices=list(SUITES) + ["ref", "scatter", "tile",
-                                                      "dtile", "all"],
+                                                      "dtile", "segm32",
+                                                      "splitkv", "all"],
                     default="all")
     ap.add_argument("--out-dir", default=os.path.join(
         os.path.dirname(_HERE), "..", "results", "20261115_bottleneck_deepdive"))
     ap.add_argument("--fresh", action="store_true", help="忽略已有 CSV 重测")
+    ap.add_argument("--variants", default="0,1,2,3",
+                    help="splitkv suite 的变体臂（§13.3 阶梯；逗号分隔）")
     args = ap.parse_args()
     out_dir = os.path.abspath(args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
@@ -490,6 +641,12 @@ def main():
             continue
         if name == "dtile":
             run_dtile_suite(out_dir)
+            continue
+        if name == "segm32":
+            run_segm32_suite(out_dir)
+            continue
+        if name == "splitkv":
+            run_splitkv_suite(out_dir, args.variants)
             continue
         fname = {"decode": "decode_surface.csv", "prefill": "prefill_surface.csv",
                  "segm": "segm_sweep.csv", "td": "td_ab.csv",

@@ -300,6 +300,25 @@ def install_attn_tile_mode_for_iluvatar() -> None:
 install_attn_tile_mode_for_iluvatar()
 
 
+def install_attn_splitkv_for_iluvatar() -> None:
+    """Self-written split-KV decode attention kernel (see attn_splitkv).
+
+    交接书 docs/splitkv-kernel-handoff.md §5-§7/§13.3：自研 decode split-KV
+    kernel（裸 jit / 无 atomic / 无运行时 autotune / TILE=16 / w1s1 /
+    自适应分段 + writethrough / 确定性两段归约 / §13.3 变体阶梯
+    V0-V3）。hop1 路由仅拦 decode（q<=1, bs<=64, 无 KV 量化/附加特性），
+    其余透传上游 unified_attention。非 bit-exact（分段归约分组变化）——
+    上线须过对拍/精度门。默认 OFF，VLLM_FL_ATTN_SPLITKV=1 启用；
+    VLLM_FL_ATTN_SPLITKV_VARIANT 选 0-3（默认 1=手动双缓冲）。
+    """
+    from .attn_splitkv import install as _install_attn_splitkv
+
+    _install_attn_splitkv()
+
+
+install_attn_splitkv_for_iluvatar()
+
+
 def patch_torch_inductor_for_iluvatar() -> None:
     """Patch torch._inductor GPUTarget to use the correct triton backend name.
 

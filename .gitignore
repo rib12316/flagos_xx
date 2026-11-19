@@ -29,3 +29,4 @@ Thumbs.db
 # profile traces（chrome trace 太大，存档走 results/ 压缩包）
 *.trace.json
 *.chrome.trace
+d4-metax-port.bundle

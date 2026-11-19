@@ -79,10 +79,20 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
             raise ValueError("FL W8A8 requires one scale per output channel")
 
         # FlagGems scaled_mm consumes B in [K, N] layout. Keep scales as [N].
+        # MetaX C500: mctlassEx w8a8_scaled_mm_azp consumes B=[N,K] row-major
+        # (the unpacker's natural layout) — skip the transpose, zero copies
+        # (see w8a8/mctlass_mm.py; VLLM_FL_MCTLASS_W8A8=0 restores [K,N]).
+        from .mctlass_mm import metax_mctlass_w8a8
+
+        runtime_weight = (
+            weight.contiguous()
+            if metax_mctlass_w8a8()
+            else weight.t().contiguous()
+        )
         replace_parameter(
             layer,
             w_q_name,
-            torch.nn.Parameter(weight.t().contiguous(), requires_grad=False),
+            torch.nn.Parameter(runtime_weight, requires_grad=False),
         )
         replace_parameter(
             layer,
@@ -114,7 +124,9 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
             bias=bias,
             out_dtype=x.dtype,
         )
-        return output.reshape(*original_shape[:-1], weight.shape[1])
+        # 输出维度 = 权重 scale 元素数（N）：对 [K,N] 与沐曦 [N,K] 两种
+        # 运行时布局都成立（weight.shape 在两者间含义互换）。
+        return output.reshape(*original_shape[:-1], weight_scale.numel())
 
 
 def register_fl_w8a8_linear_kernel(registry: dict) -> bool:

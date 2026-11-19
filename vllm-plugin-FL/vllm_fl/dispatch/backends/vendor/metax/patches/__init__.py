@@ -15,3 +15,14 @@ from . import gdn_linear_attn  # noqa: F401 — register MacaGatedDeltaNetAttent
 # TODO: remove when MetaX Triton support is available.
 import vllm.utils.import_utils as iu
 iu.has_triton_kernels = lambda: False
+
+# --------------------------------------------------
+# FL ⑥ split-KV decode hop（env 门控默认关：VLLM_FL_ATTN_SPLITKV=1 启用）。
+# 装载在全部内核 patch 之后：wrapper 链以 flash_attn_with_kvcache 为最内层。
+try:
+    from .. import attn_splitkv_hop
+    attn_splitkv_hop.install()
+except Exception as _e:  # pragma: no cover - 永不阻塞 metax 后端装载
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "attn_splitkv_hop install skipped: %s", _e)

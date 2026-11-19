@@ -1,0 +1,11 @@
+[D4 metax port @ 2026-11-19]
+- 机器: MetaX C500 64GB (mx-smi 2.3.1 / MACA 3.7.0.38 / driver 3.8.30), 104 SMs
+- torch 2.8.0+metax3.7.0.7 / triton 3.0.0+metax3.7.0.7 / vllm 0.24.0+empty / evalscope 1.11.1
+- 插件安装: pip install --no-deps --no-build-isolation /data/flagos_xx/vllm-plugin-FL
+  direct_url=file:///data/flagos_xx/vllm-plugin-FL; site-packages diff 仅 __pycache__; flag_gems==5.3.5
+- 分支: feat/d4-metax-port (off 06a2ef5)
+- ckpt: /workspace/MiniCPM5-2B-w8a8-v2 由 tools/quantize_int8_rtn.py 本机再生
+  (clip=1.0 smooth=0.5 keep=none lm-head-int8 seed=1234; roundtrip 295 tensors bit_exact;
+   numeric worst_scale_rel=5.46e-3 limit=2%; scheme=PackedW8A8Int8 incl lm_head)
+- serve: VLLM_PLUGINS=fl vllm serve ... --compilation-config FULL_DECODE_ONLY,
+  gpu-mem-util 0.85, max-model-len 131072（官方锁死参数）
