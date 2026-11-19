@@ -280,6 +280,18 @@ class OpManager:
 
     def _record_first_use(self, op_name: str, impl: OpImpl) -> None:
         """Log and record the selected implementation when it changes."""
+        # Dynamo fullgraph capture cannot enter the RLock below, and a
+        # first-time resolve inside torch.compile (vLLM AOT-compiles the
+        # model forward) would otherwise abort EngineCore startup. First-use
+        # recording is observability-only, so skip it while compiling.
+        try:
+            import torch
+
+            if torch.compiler.is_compiling():
+                return
+        except Exception:  # pragma: no cover - torch always present in practice
+            pass
+
         impl_id = impl.impl_id
         last_impl_id = self._called_ops.get(op_name)
 
@@ -387,6 +399,17 @@ class OpManager:
             )
 
         return available
+
+    def warm(self, op_name: str) -> str:
+        """Resolve and record an op without invoking it.
+
+        vLLM AOT-compiles the model forward with fullgraph dynamo; a
+        first-time resolve there would enter locks dynamo cannot trace.
+        Warming an op before capture keeps the hot path lock-free.
+        """
+        impl = self._resolve_impl(op_name)
+        self._record_first_use(op_name, impl)
+        return impl.impl_id
 
     def resolve(self, op_name: str) -> Callable:
         """

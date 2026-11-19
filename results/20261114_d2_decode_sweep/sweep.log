@@ -1,0 +1,98 @@
+/usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:728: DeprecationWarning: use_cuda_graph is deprecated; use benchmark_mode='replay' or benchmark_mode='event'
+  super().__init__(*args, **kwargs)
+/usr/local/lib/python3.12/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
+  resolved_benchmark = resolve_benchmarker(
+/usr/local/lib/python3.12/subprocess.py:1127: ResourceWarning: subprocess 21247 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+
+== gate_up K=2048 N=12288 M=64 | 整链 t_chain=65.2µs (~412GB/s) ==
+      56.2 µs  (64, 256, 64, 4, 2)  (1.160× chain) ✓GATE
+      60.5 µs  (64, 256, 64, 8, 2)  (1.077× chain)
+      62.1 µs  (64, 128, 128, 8, 2)  (1.049× chain)
+      64.2 µs  (64, 128, 64, 4, 3)  (1.015× chain)
+      67.7 µs  (64, 128, 64, 4, 2)  (0.962× chain)
+      69.1 µs  (64, 128, 128, 4, 2)  (0.943× chain)
+  -> 最优 (64, 256, 64, 4, 2) = 1.160× chain（判据 ≥1.15× 过）
+
+== gate_up K=2048 N=12288 M=128 | 整链 t_chain=90.4µs (~316GB/s) ==
+      74.2 µs  (128, 128, 64, 8, 2)  (1.219× chain) ✓GATE
+      74.5 µs  (128, 256, 64, 8, 2)  (1.214× chain) ✓GATE
+      78.9 µs  (128, 128, 64, 4, 2)  (1.147× chain)
+      91.3 µs  (128, 256, 64, 4, 2)  (0.990× chain)
+      92.0 µs  (128, 128, 64, 8, 3)  (0.982× chain)
+     100.8 µs  (128, 256, 64, 8, 3)  (0.897× chain)
+  -> 最优 (128, 128, 64, 8, 2) = 1.219× chain（判据 ≥1.15× 过）
+
+== qkv K=2048 N=2560 M=64 | 整链 t_chain=25.2µs (~226GB/s) ==
+      17.4 µs  (64, 128, 128, 8, 2)  (1.448× chain) ✓GATE
+      19.4 µs  (64, 128, 128, 4, 2)  (1.300× chain) ✓GATE
+      19.8 µs  (64, 256, 128, 8, 2)  (1.270× chain) ✓GATE
+      19.9 µs  (32, 128, 128, 4, 2)  (1.265× chain) ✓GATE
+      20.4 µs  (64, 256, 128, 8, 3)  (1.237× chain) ✓GATE
+      22.2 µs  (64, 128, 64, 4, 2)  (1.136× chain)
+  -> 最优 (64, 128, 128, 8, 2) = 1.448× chain（判据 ≥1.15× 过）
+
+== qkv K=2048 N=2560 M=128 | 整链 t_chain=27.8µs (~221GB/s) ==
+      22.5 µs  (128, 128, 64, 8, 2)  (1.239× chain) ✓GATE
+      22.6 µs  (64, 128, 64, 4, 3)  (1.232× chain) ✓GATE
+      22.6 µs  (64, 128, 64, 4, 2)  (1.232× chain) ✓GATE
+      22.8 µs  (128, 128, 64, 8, 3)  (1.222× chain) ✓GATE
+      26.4 µs  (64, 128, 128, 8, 2)  (1.054× chain)
+      27.2 µs  (128, 256, 64, 8, 2)  (1.025× chain)
+  -> 最优 (128, 128, 64, 8, 2) = 1.239× chain（判据 ≥1.15× 过）
+
+== o K=2048 N=2048 M=64 | 整链 t_chain=24.9µs (~185GB/s) ==
+      15.9 µs  (64, 128, 128, 8, 2)  (1.567× chain) ✓GATE
+      16.1 µs  (32, 128, 128, 4, 2)  (1.546× chain) ✓GATE
+      16.2 µs  (64, 128, 128, 8, 3)  (1.532× chain) ✓GATE
+      16.5 µs  (32, 128, 128, 4, 3)  (1.503× chain) ✓GATE
+      19.1 µs  (64, 128, 128, 4, 2)  (1.304× chain) ✓GATE
+      19.2 µs  (64, 256, 128, 8, 2)  (1.296× chain) ✓GATE
+  -> 最优 (64, 128, 128, 8, 2) = 1.567× chain（判据 ≥1.15× 过）
+
+== o K=2048 N=2048 M=128 | 整链 t_chain=27.3µs (~183GB/s) ==
+      16.9 µs  (64, 128, 128, 8, 2)  (1.616× chain) ✓GATE
+      19.3 µs  (64, 256, 128, 8, 2)  (1.412× chain) ✓GATE
+      19.5 µs  (64, 128, 128, 4, 2)  (1.399× chain) ✓GATE
+      19.9 µs  (64, 256, 128, 8, 3)  (1.368× chain) ✓GATE
+      21.7 µs  (128, 128, 64, 8, 2)  (1.255× chain) ✓GATE
+      22.0 µs  (128, 128, 64, 8, 3)  (1.239× chain) ✓GATE
+  -> 最优 (64, 128, 128, 8, 2) = 1.616× chain（判据 ≥1.15× 过）
+
+== down K=6144 N=2048 M=64 | 整链 t_chain=48.6µs (~272GB/s) ==
+      31.1 µs  (64, 128, 128, 8, 2)  (1.564× chain) ✓GATE
+      31.2 µs  (64, 128, 128, 8, 3)  (1.557× chain) ✓GATE
+      31.5 µs  (32, 128, 128, 4, 2)  (1.545× chain) ✓GATE
+      31.6 µs  (32, 128, 128, 4, 3)  (1.539× chain) ✓GATE
+      39.4 µs  (64, 128, 128, 4, 2)  (1.233× chain) ✓GATE
+      39.4 µs  (64, 128, 128, 4, 3)  (1.233× chain) ✓GATE
+  -> 最优 (64, 128, 128, 8, 2) = 1.564× chain（判据 ≥1.15× 过）
+
+== down K=6144 N=2048 M=128 | 整链 t_chain=54.0µs (~257GB/s) ==
+      36.5 µs  (64, 128, 128, 8, 2)  (1.478× chain) ✓GATE
+      40.4 µs  (64, 256, 128, 8, 2)  (1.338× chain) ✓GATE
+      40.4 µs  (64, 128, 128, 4, 2)  (1.335× chain) ✓GATE
+      40.9 µs  (64, 256, 128, 8, 3)  (1.320× chain) ✓GATE
+      47.5 µs  (128, 128, 64, 8, 2)  (1.137× chain)
+      47.8 µs  (128, 128, 64, 8, 3)  (1.130× chain)
+  -> 最优 (64, 128, 128, 8, 2) = 1.478× chain（判据 ≥1.15× 过）
+
+== lm_head K=2048 N=130560 M=64 | 整链 t_chain=627.9µs (~453GB/s) ==
+     567.7 µs  (64, 128, 64, 4, 2)  (1.106× chain)
+     569.6 µs  (64, 256, 64, 4, 2)  (1.103× chain)
+     589.5 µs  (64, 256, 64, 8, 2)  (1.065× chain)
+     617.8 µs  (64, 256, 64, 4, 3)  (1.016× chain)
+     655.3 µs  (64, 128, 128, 8, 2)  (0.958× chain)
+     657.3 µs  (64, 128, 64, 4, 3)  (0.955× chain)
+  -> 最优 (64, 128, 64, 4, 2) = 1.106× chain（判据 ≥1.15× 不过）
+
+== lm_head K=2048 N=130560 M=128 | 整链 t_chain=805.5µs (~374GB/s) ==
+     691.5 µs  (128, 256, 64, 8, 2)  (1.165× chain) ✓GATE
+     692.4 µs  (128, 128, 64, 8, 2)  (1.163× chain) ✓GATE
+     742.7 µs  (128, 128, 64, 4, 2)  (1.084× chain)
+     772.9 µs  (128, 256, 64, 4, 2)  (1.042× chain)
+     958.6 µs  (128, 128, 64, 8, 3)  (0.840× chain)
+    1032.8 µs  (128, 256, 64, 8, 3)  (0.780× chain)
+  -> 最优 (128, 256, 64, 8, 2) = 1.165× chain（判据 ≥1.15× 过）
+sys:1: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>

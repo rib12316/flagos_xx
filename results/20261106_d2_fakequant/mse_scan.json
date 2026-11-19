@@ -1,0 +1,63 @@
+{
+  "per_alpha_mean_mse": {
+    "1.0": 5.3022859659979706e-08,
+    "0.999": 5.28983512020142e-08,
+    "0.99": 5.2421082362296654e-08,
+    "0.98": 5.2775006526648826e-08,
+    "0.95": 6.060871571214014e-08
+  },
+  "best_alpha": 0.99,
+  "n_tensors": 294,
+  "samples": [
+    {
+      "tensor": "model.layers.20.mlp.gate_proj.weight",
+      "alpha": 1.0,
+      "mse": 3.526825054223082e-08
+    },
+    {
+      "tensor": "model.layers.20.mlp.gate_proj.weight",
+      "alpha": 0.999,
+      "mse": 3.5184225311013506e-08
+    },
+    {
+      "tensor": "model.layers.20.mlp.gate_proj.weight",
+      "alpha": 0.99,
+      "mse": 3.48998518973076e-08
+    },
+    {
+      "tensor": "model.layers.20.mlp.gate_proj.weight",
+      "alpha": 0.98,
+      "mse": 3.5214235083458334e-08
+    },
+    {
+      "tensor": "model.layers.20.mlp.gate_proj.weight",
+      "alpha": 0.95,
+      "mse": 4.123204178085871e-08
+    },
+    {
+      "tensor": "model.layers.20.self_attn.q_proj.weight",
+      "alpha": 1.0,
+      "mse": 3.556478844757294e-08
+    },
+    {
+      "tensor": "model.layers.20.self_attn.q_proj.weight",
+      "alpha": 0.999,
+      "mse": 3.546475468851895e-08
+    },
+    {
+      "tensor": "model.layers.20.self_attn.q_proj.weight",
+      "alpha": 0.99,
+      "mse": 3.524771230445367e-08
+    },
+    {
+      "tensor": "model.layers.20.self_attn.q_proj.weight",
+      "alpha": 0.98,
+      "mse": 3.556851879693568e-08
+    },
+    {
+      "tensor": "model.layers.20.self_attn.q_proj.weight",
+      "alpha": 0.95,
+      "mse": 4.2042735515224194e-08
+    }
+  ]
+}

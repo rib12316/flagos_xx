@@ -254,6 +254,52 @@ def install_attn_launch_config_for_iluvatar() -> None:
 install_attn_launch_config_for_iluvatar()
 
 
+def install_attn_td_mode_for_iluvatar() -> None:
+    """Force use_td=True for unified_attention (TD loads, see attn_td_mode).
+
+    BI-V150 tune: decode 3D 1.20-1.31x / decode 2D 1.55x / prefill 1.10-1.14x
+    (graph-mode probe, non-bit-exact -- parity-gated). Env switches:
+    VLLM_FL_ATTN_TD=0 restores upstream use_td resolution.
+    """
+    from .attn_td_mode import install as _install_attn_td_mode
+
+    _install_attn_td_mode()
+
+
+install_attn_td_mode_for_iluvatar()
+
+
+def install_sample_filter_mode_for_iluvatar() -> None:
+    """Widen the top-p sampling filter launch grid (see sample_filter_mode).
+
+    BI-V150 tune: bs=64 filter 3.7ms -> 1.1ms (grid 16 -> 64 programs),
+    bitwise-identical output (per-row kernel math independent of grid).
+    Env switches: VLLM_FL_SAMPLE_FILTER=0 restores upstream;
+    VLLM_FL_SAMPLE_FILTER_PROGRAMS caps the grid (default 64).
+    """
+    from .sample_filter_mode import install as _install_sample_filter_mode
+
+    _install_sample_filter_mode()
+
+
+install_sample_filter_mode_for_iluvatar()
+
+
+def install_attn_tile_mode_for_iluvatar() -> None:
+    """Prefill TILE_SIZE=16 (see attn_tile_mode).
+
+    BI-V150 tune: prefill attention 1.10-1.11x across shapes (tile sweep,
+    graph-mode). Non-bit-exact (kv-loop regrouping) -- default OFF,
+    VLLM_FL_ATTN_TILE=1 to enable (parity-gated like attn_td_mode).
+    """
+    from .attn_tile_mode import install as _install_attn_tile_mode
+
+    _install_attn_tile_mode()
+
+
+install_attn_tile_mode_for_iluvatar()
+
+
 def patch_torch_inductor_for_iluvatar() -> None:
     """Patch torch._inductor GPUTarget to use the correct triton backend name.
 

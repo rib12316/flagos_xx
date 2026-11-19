@@ -1,0 +1,60 @@
+# events: 626131
+# kernels=81717 cpu_ops=237518 cuda_api=107750
+
+# GPU kernel 总时间 49581.5 ms / trace span 451580.9 ms -> GPU busy 11.0%，idle 89.0%
+
+== 分类聚合 (ms, 占 kernel 时间比) ==
+  A_attention                   40725.22 ms   82.1%
+  M_int8_gemm                    4779.75 ms    9.6%
+  O_other                        1326.96 ms    2.7%
+  Q_quant_bare                    999.86 ms    2.0%
+  S_sampling/softmax              820.93 ms    1.7%
+  N_norm                          748.59 ms    1.5%
+  E_epi_fused                     162.04 ms    0.3%
+  X_elementwise/copy               18.18 ms    0.0%
+
+== Top-20 单 kernel (ms | count | avg µs) ==
+  40553.10 ms |   5460 |   7427.3 µs | kernel_unified_attention
+   4779.75 ms |  21672 |    220.5 µs | _w8a8_fused_gemm_kernel
+    999.86 ms |  22023 |     45.4 µs | _dynamic_per_token_quant_int8_bare_kernel
+    786.94 ms |    169 |   4656.5 µs | _topk_topp_kernel
+    752.67 ms |   5460 |    137.9 µs | triton_poi_fused_mul_silu_slice_1
+    451.63 ms |   5460 |     82.7 µs | triton_red_fused_fused_add_rms_norm_2
+    437.85 ms |   5330 |     82.1 µs | triton_poi_fused_3
+    291.40 ms |   5460 |     53.4 µs | triton_red_fused_fused_add_rms_norm_0
+    172.11 ms |   5460 |     31.5 µs | reshape_and_cache_kernel_flash
+     92.14 ms |    183 |    503.5 µs | void Gemm_tcu_mr_kernel::gemm_tcu_h<64u, 256u, 64u, 16u, 64u, 2u, (ixblasTrans_t)1, (ixblasTrans_t)1
+     38.58 ms |    183 |    210.8 µs | true_div_func_kernel_rank_2
+     34.14 ms |    351 |     97.3 µs | _w8a8_int32_epilogue_kernel
+     21.61 ms |    225 |     96.0 µs | zeros_kernel
+     21.07 ms |    183 |    115.1 µs | true_div_func_kernel_rank_1
+     20.38 ms |    197 |    103.4 µs | softmax_kernel_inner
+     19.30 ms |     42 |    459.6 µs | void Gemm_tcu_mr_kernel::gemm_tcu_h<256u, 256u, 64u, 64u, 64u, 2u, (ixblasTrans_t)1, (ixblasTrans_t)
+     18.64 ms |    112 |    166.4 µs | sweep
+     16.45 ms |    126 |    130.6 µs | void Gemm_tcu_mr_kernel::gemm_tcu_h<256u, 256u, 64u, 64u, 64u, 2u, (ixblasTrans_t)1, (ixblasTrans_t)
+     13.61 ms |    183 |     74.4 µs | argmax_kernel_inner
+     11.51 ms |    563 |     20.4 µs | _to_copy_func_kernel_rank_1
+
+== GPU 空闲 gap 总计 401999.4 ms, top-8: ==
+  23322.56 ms @ t+428218.9ms
+  20064.05 ms @ t+364324.2ms
+  18227.43 ms @ t+319787.9ms
+  16067.19 ms @ t+122928.3ms
+  15528.70 ms @ t+139016.4ms
+  15231.55 ms @ t+277581.0ms
+  14336.76 ms @ t+108574.5ms
+  13467.33 ms @ t+246381.0ms
+
+== w8a8/int_mm cpu_op 首输入形状直方图 (真实 M) ==
+
+== cuda api Top-10 (总 ms | count) ==
+  51247.60 ms |   81366 | cuLaunchKernel
+   1467.24 ms |    1830 | cudaMemcpyAsync
+    569.39 ms |     365 | cudaEventSynchronize
+    222.29 ms |     351 | cudaLaunchKernel
+     86.25 ms |     873 | cudaEventRecord
+     33.01 ms |   22275 | cudaStreamIsCapturing
+     18.98 ms |       7 | cudaDeviceSynchronize
+     10.32 ms |      53 | cudaGraphLaunch
+      5.14 ms |     183 | cudaStreamWaitEvent
+      1.70 ms |      16 | cudaHostAlloc

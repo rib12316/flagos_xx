@@ -222,6 +222,24 @@ class PlatformFL(Platform):
             )
 
         # --------------------------------------------------------
+        # D2 · P2：KV cache int8_per_token_head 注入（env 门控）。serve 参数
+        # 一字不动红线 → 不走 CLI --kv-cache-dtype，在此改 cache_dtype。本栈
+        # attention 后端 = TritonAttentionBackend（VLLM_PLUGINS=fl 实际选择，
+        # unified_attention 为可读 Triton），int8_per_token_head 无 capability
+        # 闸门（仅 fp8 在 cap<89 硬 raise，triton_attn.py 构造检查）：写入侧
+        # triton_reshape_and_cache_flash_per_token_head_quant，读取侧
+        # unified_attention KV_QUANT_MODE 分支 kernel 内反量化。收益双杀：KV
+        # 读带宽减半 + 池 tokens ×~1.94（head_size 128→132 inline scale
+        # padding，1024/528）。默认 "0"（opt-in）落地；烟测过闸后单独 commit
+        # 翻默认 "1"——官方 bench 无法注入 env，翻转行即回退边界。
+        _fl_kv = os.environ.get("VLLM_FL_KV_INT8", "0")
+        if _fl_kv == "1" and cache_config.cache_dtype == "auto":
+            cache_config.cache_dtype = "int8_per_token_head"
+            logger.info(
+                "FL: VLLM_FL_KV_INT8=1 -> cache_dtype=int8_per_token_head"
+            )
+
+        # --------------------------------------------------------
         # D1 · H3'（第一级）：max_num_batched_tokens 覆盖（env 门控，默认不生效）。
         # 【负结果存档 2026-11-05】8192 曾按 T0.5 16K 热轮 +1.77% 临时采纳，但 T1
         # 官方双场景 4K 侧回退 -12%~-35%（轮 1401/2366/1714 vs 对照 2508/2706/2762，

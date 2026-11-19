@@ -41,6 +41,7 @@ def register_builtins(registry) -> None:
     # available PyTorch fallbacks from registering.
     op_names = (
         "dynamic_per_token_quant_int8",
+        "w8a8_dynamic_per_token_linear",
         "silu_and_mul",
         "gelu_and_mul",
         "rms_norm",

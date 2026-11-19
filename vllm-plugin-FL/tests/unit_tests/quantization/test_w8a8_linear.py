@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -141,7 +140,7 @@ def test_w8a8_linear_policy_disable_falls_back_to_native_candidate(monkeypatch):
     assert "disabled by policy" in reason
 
 
-def test_w8a8_linear_quantizes_then_calls_flaggems_scaled_mm(monkeypatch):
+def test_w8a8_linear_quantizes_then_calls_dispatched_scaled_mm(monkeypatch):
     calls = []
     x = torch.ones((2, 4), dtype=torch.bfloat16)
     x_q = torch.ones((2, 4), dtype=torch.int8)
@@ -155,14 +154,12 @@ def test_w8a8_linear_quantizes_then_calls_flaggems_scaled_mm(monkeypatch):
         "_dynamic_per_token_quant_int8",
         lambda value: (x_q, x_scale),
     )
-    flag_gems = ModuleType("flag_gems")
 
     def fake_scaled_mm(*args, **kwargs):
         calls.append((args, kwargs))
         return expected
 
-    flag_gems.scaled_mm = fake_scaled_mm
-    monkeypatch.setitem(sys.modules, "flag_gems", flag_gems)
+    monkeypatch.setattr(linear, "_w8a8_scaled_mm", fake_scaled_mm)
 
     kernel = object.__new__(linear.FLW8A8DynamicLinearKernel)
     kernel.layer_param_names = [
@@ -245,9 +242,16 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
     ]
     kernel.process_weights_after_loading(layer)
 
-    assert layer.weight.shape == (4, 3)
-    assert layer.weight.stride() == (3, 1)
-    assert torch.equal(layer.weight, checkpoint_weight.t().contiguous())
+    IS_METAX = "metax" in torch.__version__.lower()
+    if IS_METAX:
+        # 沐曦 mctlass 栈：unpack 天然 [N,K] 布局直存（w8a8/mctlass_mm.py）
+        assert layer.weight.shape == (3, 4)
+        assert layer.weight.stride() == (4, 1)
+        assert torch.equal(layer.weight, checkpoint_weight.contiguous())
+    else:
+        assert layer.weight.shape == (4, 3)
+        assert layer.weight.stride() == (3, 1)
+        assert torch.equal(layer.weight, checkpoint_weight.t().contiguous())
     assert layer.weight_scale.shape == (3,)
     assert layer.weight_scale.dtype == torch.float32
     assert torch.equal(layer.weight_scale, checkpoint_scale.reshape(-1))
@@ -257,7 +261,6 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
         "_dynamic_per_token_quant_int8",
         dynamic_per_token_quant_int8,
     )
-    flag_gems = ModuleType("flag_gems")
 
     def fake_scaled_mm(
         x_q,
@@ -265,21 +268,23 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
         x_scale,
         weight_scale,
         *,
-        bias,
-        out_dtype,
+        bias=None,
+        out_dtype=None,
     ):
         assert x_q.shape == (2, 4)
         assert x_scale.shape == (2, 1)
-        assert weight.shape == (4, 3)
+        assert weight.shape == ((3, 4) if IS_METAX else (4, 3))
         assert weight_scale.shape == (3,)
-        accumulator = x_q.to(torch.int32) @ weight.to(torch.int32)
+        operand = (
+            weight.to(torch.int32).t() if IS_METAX else weight.to(torch.int32)
+        )
+        accumulator = x_q.to(torch.int32) @ operand
         output = accumulator.to(torch.float32) * x_scale * weight_scale.reshape(1, -1)
         if bias is not None:
             output += bias.reshape(1, -1)
         return output.to(out_dtype)
 
-    flag_gems.scaled_mm = fake_scaled_mm
-    monkeypatch.setitem(sys.modules, "flag_gems", flag_gems)
+    monkeypatch.setattr(linear, "_w8a8_scaled_mm", fake_scaled_mm)
 
     actual = kernel.apply_weights(layer, x, bias)
 

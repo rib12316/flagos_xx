@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""FlagGems scaled-mm adapter for dynamic-token/per-channel W8A8."""
+"""Dispatched scaled-mm adapter for dynamic-token/per-channel W8A8."""
 
 from __future__ import annotations
 
@@ -32,11 +32,14 @@ from vllm_fl.utils import (
 FLAGGEMS_W8A8_LINEAR_OP = "w8a8_dynamic_per_token_linear"
 
 _dynamic_per_token_quant_int8 = CachedOp("dynamic_per_token_quant_int8")
+_w8a8_scaled_mm = CachedOp(FLAGGEMS_W8A8_LINEAR_OP)
 
 
 class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
-    """Use FlagGems scaled-mm with the vLLM dynamic-W8A8 contract.
+    """Use the dispatched W8A8 scaled-mm with the vLLM dynamic-W8A8 contract.
 
+    The GEMM runs through the ``w8a8_dynamic_per_token_linear`` dispatch op
+    (torch._int_mm impl preferred, FlagGems scaled_mm as ordered fallback).
     Runtime operands are ``A=[M,K] int8``, ``B=[K,N] int8``,
     ``scale_a=[M,1] fp32`` and ``scale_b=[N] fp32``.
     """
@@ -76,10 +79,20 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
             raise ValueError("FL W8A8 requires one scale per output channel")
 
         # FlagGems scaled_mm consumes B in [K, N] layout. Keep scales as [N].
+        # MetaX C500: mctlassEx w8a8_scaled_mm_azp consumes B=[N,K] row-major
+        # (the unpacker's natural layout) — skip the transpose, zero copies
+        # (see w8a8/mctlass_mm.py; VLLM_FL_MCTLASS_W8A8=0 restores [K,N]).
+        from .mctlass_mm import metax_mctlass_w8a8
+
+        runtime_weight = (
+            weight.contiguous()
+            if metax_mctlass_w8a8()
+            else weight.t().contiguous()
+        )
         replace_parameter(
             layer,
             w_q_name,
-            torch.nn.Parameter(weight.t().contiguous(), requires_grad=False),
+            torch.nn.Parameter(runtime_weight, requires_grad=False),
         )
         replace_parameter(
             layer,
@@ -99,13 +112,11 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from flag_gems import scaled_mm
-
         weight, weight_scale, _, _, _ = self._get_layer_params(layer)
         original_shape = x.shape
         x_2d = x.reshape(-1, original_shape[-1]).contiguous()
         x_q, x_scale = _dynamic_per_token_quant_int8(x_2d)
-        output = scaled_mm(
+        output = _w8a8_scaled_mm(
             x_q,
             weight,
             x_scale,
@@ -113,7 +124,9 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
             bias=bias,
             out_dtype=x.dtype,
         )
-        return output.reshape(*original_shape[:-1], weight.shape[1])
+        # 输出维度 = 权重 scale 元素数（N）：对 [K,N] 与沐曦 [N,K] 两种
+        # 运行时布局都成立（weight.shape 在两者间含义互换）。
+        return output.reshape(*original_shape[:-1], weight_scale.numel())
 
 
 def register_fl_w8a8_linear_kernel(registry: dict) -> bool:
@@ -126,6 +139,16 @@ def register_fl_w8a8_linear_kernel(registry: dict) -> bool:
     candidates = registry.setdefault(PlatformEnum.OOT, [])
     if FLW8A8DynamicLinearKernel not in candidates:
         candidates.insert(0, FLW8A8DynamicLinearKernel)
+
+    # Warm the W8A8 dispatch ops before vLLM's AOT fullgraph capture: a
+    # first-time resolve inside torch.compile would enter locks dynamo
+    # cannot trace (EngineCore startup failure). Runs at quant registration,
+    # well before the first forward.
+    try:
+        _dynamic_per_token_quant_int8.pre_resolve()
+        _w8a8_scaled_mm.pre_resolve()
+    except Exception:  # pragma: no cover - never block kernel registration
+        pass
     return True
 
 

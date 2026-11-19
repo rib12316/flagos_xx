@@ -1,0 +1,46 @@
+{
+ "records": [
+  {
+   "unique_id": "test/algebra/1035.json",
+   "ref": "3",
+   "pred": "3",
+   "ok": true,
+   "len": 1375,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1098.json",
+   "ref": "6+9i",
+   "pred": "6+9i",
+   "ok": true,
+   "len": 1136,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1275.json",
+   "ref": "\\frac{\\sqrt{3}}{3}",
+   "pred": "\\frac{\\sqrt{3}}{3}",
+   "ok": true,
+   "len": 1614,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1332.json",
+   "ref": "9",
+   "pred": "9",
+   "ok": true,
+   "len": 898,
+   "truncated": false
+  },
+  {
+   "unique_id": "test/algebra/1457.json",
+   "ref": "-120",
+   "pred": "-120",
+   "ok": true,
+   "len": 985,
+   "truncated": false
+  }
+ ],
+ "frozen": "429b0b44ca57",
+ "max_tokens": 3072
+}

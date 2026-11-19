@@ -40,6 +40,14 @@ _PATCH_MARKER = "_vllm_fl_packed_w8a8_v024"
 class CompressedTensorsPackedW8A8Int8(CompressedTensorsW8A8Int8):
     """Adapt packed weights to the selected dynamic-token W8A8 kernel."""
 
+    @classmethod
+    def get_min_capability(cls) -> int:
+        """BI-V150 reports sm (7,1); the FL kernel is capability-agnostic
+        (FlagGems Triton int8 scaled_mm with int32 accumulation), so the
+        upstream ``CompressedTensorsW8A8Int8`` gate of 75 would wrongly
+        reject packed checkpoints on this device."""
+        return 71
+
     def __init__(self, layer_name: str | None = None) -> None:
         super().__init__(
             strategy=QuantizationStrategy.CHANNEL,

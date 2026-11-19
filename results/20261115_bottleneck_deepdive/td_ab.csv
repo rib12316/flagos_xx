@@ -1,0 +1,9 @@
+tag,S,q_len,kv_len,path_req,path_eff,segments,use_td,num_warps,num_stages,time_us,kv_read_bytes,read_ref_us,GBps_attn,GBps_ref,pct_of_ref,pct_of_829,T_MACs,pct_of_118,verdict
+td bs64 kv2k td0,64,1,2048,3d,3d,16,0,1,1,479.5,134217728,381.4,280,352,80,34,1.12,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs64 kv2k td1,64,1,2048,3d,3d,16,1,1,1,400.1,134217728,381.4,335,352,95,40,1.34,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs64 kv16k td0,64,1,16384,3d,3d,16,0,1,1,3386.6,1073741824,3054.2,317,352,90,38,1.27,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs64 kv16k td1,64,1,16384,3d,3d,16,1,1,1,2696.7,1073741824,3053.5,398,352,113,48,1.59,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs16 kv8k td0,16,1,8192,3d,3d,16,0,1,1,504.4,134217728,381.3,266,352,76,32,1.06,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs16 kv8k td1,16,1,8192,3d,3d,16,1,1,1,386.2,134217728,381.5,348,352,99,42,1.39,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs128 kv16k td0,128,1,16384,3d,2d,1,0,2,1,9995.8,2147483648,6501.8,215,330,65,26,0.86,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
+td bs128 kv16k td1,128,1,16384,3d,2d,1,1,2,1,6460.1,2147483648,6510.0,332,330,101,40,1.33,1,latency/occupancy-bound（量化无效，需 kernel 形态工程）
