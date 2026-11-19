@@ -1,0 +1,10 @@
+bs,variant,us,equal_note
+32,pytorch_fallback,5053.824186325073,
+32,torch_sort_only,1330.8159708976746,
+64,pytorch_fallback,9662.975788116455,
+64,torch_sort_only,2618.8799142837524,
+64,direct_B8192_t4096_g64,,FAIL frame #28: <unknown function> + 0x29a0ed (0x5591462ad0ed in /opt/conda/bin/python3)
+64,direct_B4096_t2048_g64,,FAIL frame #25: <unknown function> + 0x29a0ed (0x563fa4ca30ed in /opt/conda/bin/python3)
+64,direct_B4096_t4096_g64,,FAIL frame #28: <unknown function> + 0x29a0ed (0x55c16f8580ed in /opt/conda/bin/python3)
+64,direct_B2048_t2048_g64,,FAIL frame #28: <unknown function> + 0x29a0ed (0x564a32e4b0ed in /opt/conda/bin/python3)
+64,direct_B1024_t1024_g64,,FAIL frame #28: <unknown function> + 0x29a0ed (0x55880dd8a0ed in /opt/conda/bin/python3)
