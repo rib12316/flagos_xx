@@ -22,7 +22,7 @@ for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ | s
     UPD=1
     echo "-- 远端 $b 领先 ${N} 个提交："
     git log --oneline --no-decorate "$BASE..origin/$b" | head -5
-    [ "$b" = "main" ] && echo "   >> 建议：若本机无未提交工作，执行 git merge --ff-only origin/main"
+    [ "$b" = "delivery/s2-final" ] && echo "   >> 建议：若本机无未提交工作，执行 git merge --ff-only origin/delivery/s2-final"
     [ -n "$LB" ] || echo "   >> 注意：本机无此分支（新分支），需要时 git checkout -b $b origin/$b"
   fi
 done
@@ -32,9 +32,9 @@ for b in $(git for-each-ref --format='%(refname:short)' refs/heads/); do
   [ "${N:-0}" -gt 0 ] && { UPD=1; echo "-- 本机 $b 领先远端 ${N} 个提交（记得 push）"; }
 done
 
-# 3) 任务板 / 留言区变更（远端 main 上）
-if [ "$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)" -gt 0 ]; then
-  D=$(git diff HEAD origin/main -- docs/双机任务板.md 2>/dev/null | grep -E '^[+-][^+-]' | head -30)
+# 3) 任务板 / 留言区变更（远端 delivery/s2-final 上）
+if [ "$(git rev-list --count HEAD..origin/delivery/s2-final 2>/dev/null || echo 0)" -gt 0 ]; then
+  D=$(git diff HEAD origin/delivery/s2-final -- docs/双机任务板.md 2>/dev/null | grep -E '^[+-][^+-]' | head -30)
   [ -n "$D" ] && { echo "-- 任务板有变更："; echo "$D"; }
 fi
 
