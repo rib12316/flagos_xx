@@ -1,7 +1,7 @@
 # delivery/s2-final —— 交付分支（唯一事实源）
 
-> 天数 BI-V150 侧开发**封板**（2026-11-19）。后续：沐曦 C500 clone 本分支、
-> 在本分支上完成 metax 适配与官方 bench/精度，最后双平台合并出提交 zip。
+> 天数 BI-V150 侧开发**封板**（2026-11-19）。沐曦 C500 侧 metax 适配与官方 bench/精度
+> **已完成**（2026-11-19 23:20，见文末「沐曦侧终局」）；仅剩双平台合并出提交 zip 一项。
 
 ## 天数侧终局状态（本分支基线 = 9ddaa0f + ①⑤ 默认翻转）
 
@@ -41,14 +41,17 @@ vllm serve /workspace/MiniCPM5-2B-w8a8-v2 \
   --max-model-len 131072
 ```
 
-## 沐曦侧待办（clone 本分支后）
+## 沐曦侧待办（✅ 1-4 已于 2026-11-19 完成，见下「沐曦侧终局」；⬜ 5 = 出包待办）
 
-1. `git merge feat/d4-metax-port`（bedf8ca mctlassEx w8a8 + c948594 接线；与本分支仅
-   attn_td/tile_mode 两文件可能小冲突，保留本分支默认开语义）
-2. 官方沐曦 serve 命令**无 `--compilation-config`**——数字须在该形态成立
-3. 全部优化默认激活审计（评测只设 `VLLM_PLUGINS=fl`；默认关 = 复现不存在）
-4. 官方 bench 4K/16K 各 4 轮（丢首均值，记 Mean TTFT）+ 105 题 ≥0.95
-5. 双平台源码合并 → 参赛队伍.zip（模板：FlagGems(v5.3.5 原样)/readme/report/
+1. ✅ `git merge feat/d4-metax-port`（`4eb72df` 入本分支；bedf8ca mctlassEx w8a8 +
+   c948594 接线，保留默认开语义）
+2. ✅ 官方沐曦 serve 命令**无 `--compilation-config`**——终局数字在该形态成立
+   （4K 6399.21 / 16K 7509.87）
+3. ✅ 全部优化默认激活审计（零附加 env 起 serve，审计行
+   `w8a8_dynamic_per_token_linear → default.flagos_mctlass` ✓）
+4. ✅ 官方 bench 4K/16K 各 4 轮（丢首均值）+ 105 题 98.1% ≥0.95
+   （Mean TTFT 未单独汇总，raw_runs CSV 在档可查）
+5. ⬜ 双平台源码合并 → 参赛队伍.zip（模板：FlagGems(v5.3.5 原样)/readme/report/
    vllm-plugin-FL）→ 提交平台 + 评审后 PR
 
 ## 纪律红线（全程有效）
@@ -64,8 +67,9 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
   （results/20261119_submit_audit/serve_defaults.log）
 - parity 0/16 = ①⑤ 非位精确的**预期分歧**（基线采自无 patch 态，DEVLOG 步骤 0
   在案；真精度门 = 105 题 0.9714）
-- w8a8 再生命令已实跑（295 tensors packed，RESULT 行可查）；逐位 diff 对照
-  w8a8-v2 的最终校验待办（沐曦侧合并后一并做）
+- w8a8 再生命令已实跑（295 tensors packed，RESULT 行可查）；沐曦侧已再生并
+  roundtrip 位校验（295 tensors bit_exact，`results/20261119_d4_metax_port/PROVENANCE`
+  在案）——原「逐位 diff 对照」待办就此关闭
 - ttft 双场景大优（上表）
 
 ## 沐曦侧终局（2026-11-19 23:20 完成，官方形态实测）
