@@ -43,6 +43,11 @@ def patch_triton_language_for_iluvatar() -> None:
         class _TensorDescriptorStub:
             """Stub for tl.make_tensor_descriptor — callable and hashable."""
 
+            # triton 3.0(metax) 的 visit_Call is_triton_builtin 以 __module__
+            # 前缀判 builtin——伪造 triton 前缀让死分支扫描通过（B 机
+            # 2026-11-20 实测：天数侧 triton 较新版无此断言路径）。
+            __module__ = "triton.language.stub"
+
             def __call__(self, *args, **kwargs):
                 raise RuntimeError(
                     "tl.make_tensor_descriptor is not available on triton < 3.3. "

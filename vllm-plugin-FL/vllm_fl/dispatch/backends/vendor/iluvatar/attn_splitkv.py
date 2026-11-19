@@ -80,6 +80,11 @@ from typing import Optional
 
 import torch
 
+# triton 名字必须模块级：@triton.jit kernel 定义在 _build_kernels() 函数内，
+# triton 3.0(metax) 编译期只在 __globals__ 解析自由变量（天数侧新 triton 支持
+# 闭包捕获，沐曦不支持 → NameError 'tl'）。B 机 2026-11-20 实测修复。
+from vllm.triton_utils import tl, triton  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -174,8 +179,6 @@ def _build_kernels():
     if _K1 is not None:
         return _K1, _K2
 
-    from vllm.triton_utils import tl, triton
-
     @triton.jit
     def _splitkv_decode_stage1(
         out_ptr,               # [num_tokens, NH, HD]（WRITETHROUGH 直写）
@@ -243,8 +246,10 @@ def _build_kernels():
 
         for seg in range(seg_lo, seg_hi):
             tile_lo = seg * tiles_per_seg
-            if tile_lo >= total_tiles:
-                continue                      # 空段：不写（stage2 同规则跳过）
+            # 沐曦 triton 3.0 不支持 continue（B 机 2026-11-20）：空段
+            # （tile_lo >= total_tiles → tile_hi < tile_lo，内层 range 空转）
+            # 保留初值 M=-inf/L=1/acc=0 直写占位——stage2 合并 exp(-inf)=0
+            # 数学无害（与天数侧 continue+跳过写语义等价）。
             tile_hi = tl.minimum(tile_lo + tiles_per_seg, total_tiles)
 
             M = tl.full([BLOCK_M], float("-inf"), dtype=tl.float32)
