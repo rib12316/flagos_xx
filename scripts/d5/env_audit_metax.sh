@@ -3,7 +3,8 @@
 # 判定：任何 FAIL → 退出码 1，不开工。WARN → 记录在案再继续。
 # 用法：bash scripts/d5/env_audit_metax.sh
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+# 定位到脚本所在仓库根（不依赖调用方 cwd）
+cd "$(cd "$(dirname "$0")/.." && pwd)/.."
 
 PASS=0; FAIL=0; WARN=0
 ok()   { echo "PASS  $*"; PASS=$((PASS+1)); }
@@ -29,10 +30,10 @@ V=$($PY -c "import torch;print(torch.__version__)" 2>/dev/null) || bad "torch �
 [ "${V:-}" = "2.8.0+metax3.7.0.7" ] && ok "torch $V" || { [ -n "${V:-}" ] && warn "torch $V ≠ A机 2.8.0+metax3.7.0.7"; }
 V=$($PY -c "import triton;print(triton.__version__)" 2>/dev/null) || bad "triton 不可导入"
 [ "${V:-}" = "3.0.0+metax3.7.0.7" ] && ok "triton $V" || warn "triton $V ≠ A机 3.0.0+metax3.7.0.7"
-V=$($PY -c "import vllm;print(vllm.__version__)" 2>/dev/null) || bad "vllm 不可导入"
-[ "${V:-}" = "0.24.0+empty" ] && ok "vllm $V" || warn "vllm $V ≠ 0.24.0+empty"
-V=$($PY -c "import flash_attn;print(flash_attn.__version__)" 2>/dev/null) || bad "flash_attn 不可导入"
-echo "${V:-}" | grep -q '2.6.3+metax' && ok "flash_attn $V" || warn "flash_attn ${V:-?}（A机 2.6.3+metax3.7.0.7torch2.8）"
+V=$(pip show vllm 2>/dev/null | awk '/^Version/{print $2}')
+[ "${V:-}" = "0.24.0+empty" ] && ok "vllm $V" || warn "vllm ${V:-不可导入} ≠ 0.24.0+empty"
+V=$(pip show flash_attn 2>/dev/null | awk '/^Version/{print $2}')
+echo "${V:-}" | grep -q '^2\.6\.3+metax' && ok "flash_attn $V" || warn "flash_attn ${V:-不可导入}（A机 2.6.3+metax3.7.0.7torch2.8）"
 
 echo "== 3. 本仓插件安装与 provenance =="
 LOC=$($PY -c "import vllm_fl,os;print(os.path.dirname(vllm_fl.__file__))" 2>/dev/null) || bad "vllm_fl 不可导入"
@@ -46,7 +47,7 @@ if [ -n "${LOC:-}" ]; then
     # editable/开发装也可能没有该文件
     warn "无 $DU（若为 editable 安装可接受，须确认指向本仓）"
   fi
-  diff -rq "$LOC" ./vllm-plugin-FL/vllm_fl >/dev/null 2>&1 && ok "site-packages 与仓库源码一致" || warn "site-packages 与仓库源码有差异（重装：pip install --no-deps --no-build-isolation ./vllm-plugin-FL）"
+  diff -rq -x '__pycache__' -x '*.pyc' "$LOC" ./vllm-plugin-FL/vllm_fl >/dev/null 2>&1 && ok "site-packages 与仓库源码一致" || warn "site-packages 与仓库源码有差异（重装：pip install --no-deps --no-build-isolation ./vllm-plugin-FL）"
 fi
 V=$(pip show flag_gems 2>/dev/null | awk '/^Version/{print $2}')
 [ "${V:-}" = "5.3.5" ] && ok "flag_gems $V" || bad "flag_gems ${V:-缺失} ≠ 5.3.5"
