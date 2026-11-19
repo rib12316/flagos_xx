@@ -40,3 +40,8 @@
 - 附带修正：墙图 sort 链 46% 占比含 profiler 膨胀；eager 侧归因以 A/B 臂差为准。
 - 处置：feat/d5-sample-fast-metax 归档（含 T0/T1 全套与 DEBUG 探针），不合入 delivery；site-packages 已还原 vendor 插件。
 - 方法论沉淀：**凡 kernel 微基准外推 serve，必须 L2-warm 口径**（台账 §9 方法论行）。
+
+## P1-A1 补充判决（04:0x）：decode 稳态 GPU busy ≈ 96%（非 launch-bound）
+
+- trace 最忙秒的 kernel 时间 957-984ms/s → **GPU 饱和**；早前「可见 kernel 仅解释 57% 步时」为混合阶段重建错误。
+- 推论：e2e 增益只能来自 kernel 自身效率（D7 prefill / D9 quant），无 launch/调度免费午餐（D12 类假设不立案）。
