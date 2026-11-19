@@ -67,3 +67,15 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
 - w8a8 再生命令已实跑（295 tensors packed，RESULT 行可查）；逐位 diff 对照
   w8a8-v2 的最终校验待办（沐曦侧合并后一并做）
 - ttft 双场景大优（上表）
+
+## 沐曦侧终局（2026-11-19 23:20 完成，官方形态实测）
+
+- **形态**：`VLLM_PLUGINS=fl vllm serve /workspace/MiniCPM5-2B-w8a8-v2 --port 9031 --served-model-name minicpm --gpu-memory-utilization 0.85 --max-model-len 131072`（零附加 env、**无 --compilation-config**，每场景新鲜 serve、4 轮丢首）
+- **4K = 6399.21 tok/s**（vs 沐曦纯净基线 3786.30 = **+69.0%**；轮值 6927.95/5883.03/6386.65）
+- **16K = 7509.87 tok/s**（vs 5583.49 = **+34.5%**；三热轮散布 0.12%）
+- **105 题 = 98.1%**（105/105，红线 ≥0.95 大幅过；超天数侧 0.9714）
+- 沐曦纯净基线（bf16+基线插件 13eb9be，同口径 4 轮丢首）：4K 3786.30 / 16K 5583.49
+- 激活链：w8a8-v2 ckpt（tools/quantize_int8_rtn.py 幂等再生，沐曦已再生并 roundtrip 位校验）+ **mctlassEx w8a8_scaled_mm_azp 承载**（镜像预装算子，vendor='metax' 路由，[N,K] 零拷贝布局）
+- 产物：results/20261119_d4_metax_port/{final,baseline,PROVENANCE,splitkv_iluvatar_prompt.md}
+- 注意：本机 bench 客户端有"数据落盘后汇总阶段挂死"现象——raw_runs CSV 数据完整有效，
+  汇总从 CSV 提取（已按此口径出全部数字）
