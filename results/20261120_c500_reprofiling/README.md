@@ -29,3 +29,14 @@
 
 - trace_wallmap.sh：诊断 serve 双窗 trace（decode 稳态 + prefill）→ trace_*/。
 - variance_4k_probe.sh：同 serve 3×调用 vs 新鲜 serve 2×，pass 级方差归因 → variance_4k/。
+
+## D5 采样快路径 · 终局判决（03:2x）：❌ serve 级零收益，负判决归档
+
+- T0（严格判据）全绿：peaked 保留集逐位一致；平坦形态保留集差异概率质量 2.1e-6（<<int8 噪声 3e-3）；bs=64 离线 2.23×（3.94 vs 8.77ms）。
+- T1 两轮 A/B（quick case [[4096,1024,64,32]] 与官方形状 [[4096,1024,64,64]]，各 4 pass 丢首）：
+  - bs=32：fast 26.46 vs base 26.05ms（≈零差）
+  - bs=64：fast 44.50/44.63 vs base 44.10/44.32ms（≈零差）；serve 日志快路径命中 4000+/回退 0
+- **根因：B4 探针的 9.66ms/步是 L2-cold 微基准伪影**（Cycler 8 份克隆轮转使每次调用冷缓存）；serve 内 logits 由 lm_head 刚写出（L2 热态），整条采样链真实成本 ~1-2ms，优化空间在 serve 口径下不存在。
+- 附带修正：墙图 sort 链 46% 占比含 profiler 膨胀；eager 侧归因以 A/B 臂差为准。
+- 处置：feat/d5-sample-fast-metax 归档（含 T0/T1 全套与 DEBUG 探针），不合入 delivery；site-packages 已还原 vendor 插件。
+- 方法论沉淀：**凡 kernel 微基准外推 serve，必须 L2-warm 口径**（台账 §9 方法论行）。
