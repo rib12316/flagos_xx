@@ -45,10 +45,10 @@ def top_p_filter_fast(logits: torch.Tensor, p: torch.Tensor, k: int = _K):
     bs, vocab = logits.shape
     kk = min(k, vocab)
     with torch.no_grad():
-        # 1) 降序 top-k（免全词表 sort）
+        # 1) 降序 top-k（免全词表 sort；rowmax 即 top-1，免二次全宽 reduction）
         top_vals, _ = torch.topk(logits, kk, dim=-1)            # [bs,k] 降序
-        # 2) 全词表 softmax 分母（一次 max + 一次 exp-sum，免 sort）
-        rowmax = logits.max(dim=-1, keepdim=True).values        # = top_vals[:, :1]
+        rowmax = top_vals[:, :1]                                # [bs,1]
+        # 2) 全词表 softmax 分母（一次 exp-sum，免 sort）
         ex = torch.exp(logits - rowmax)
         z = ex.sum(dim=-1, keepdim=True)                        # [bs,1]
         # 3) top-k 降序累计质量；m = 首达 p 的序数（1-based）
