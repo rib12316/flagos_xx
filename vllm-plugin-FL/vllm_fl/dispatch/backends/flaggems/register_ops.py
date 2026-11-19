@@ -33,6 +33,13 @@ def vllm_fl_int_mm_available() -> bool:
     return int_mm_available()
 
 
+def vllm_fl_mctlass_available() -> bool:
+    """Probe the image-shipped mctlassEx ScaledGEMM (MetaX C500 int8 GEMM)."""
+    from vllm_fl.quantization.w8a8.mctlass_mm import mctlass_available
+
+    return mctlass_available()
+
+
 def _flaggems_vllm_available() -> bool:
     """Probe the optional external flaggems_vllm package.
 
@@ -107,6 +114,20 @@ def register_builtins(registry) -> None:
         # FlagGems scaled_mm impl stays registered one priority step lower
         # as the ordered fallback. _int_mm does not depend on the flag_gems
         # library, so its availability probe is bound independently.
+        # MetaX C500: mctlassEx w8a8_scaled_mm_azp tops the chain (int_mm /
+        # flaggems int8 both lose to bf16 there — see w8a8/mctlass_mm.py);
+        # vendor='metax' keeps the other stacks untouched.
+        OpImpl(
+            op_name="w8a8_dynamic_per_token_linear",
+            impl_id="default.flagos_mctlass",
+            kind=BackendImplKind.DEFAULT,
+            fn=_bind_is_available(
+                backend.w8a8_dynamic_per_token_linear_mctlass,
+                vllm_fl_mctlass_available,
+            ),
+            vendor="metax",
+            priority=BackendPriority.DEFAULT + 20,
+        ),
         OpImpl(
             op_name="w8a8_dynamic_per_token_linear",
             impl_id="default.flagos_intmm",

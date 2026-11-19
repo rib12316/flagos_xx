@@ -37,6 +37,15 @@ needs_int_mm = pytest.mark.skipif(
     reason="requires CUDA and torch._int_mm",
 )
 
+# 融合档表在 MetaX 栈被清空（int_mm.py：smem 67584B>65536B 超限 + mctlass
+# 承载主路径）——warm-key 语义在沐曦无载体。
+IS_METAX = "metax" in torch.__version__.lower()
+DEFAULT_W8A8_IMPL = "default.flagos_mctlass" if IS_METAX else "default.flagos_intmm"
+needs_fused_tables = pytest.mark.skipif(
+    IS_METAX,
+    reason="fused GEMM tables are empty on the MetaX stack (mctlass path)",
+)
+
 # CUDA integer matmul is unavailable on this stack ("addmm_cuda" not
 # implemented for Int), so the bit-exact oracle runs the int32 matmul on
 # CPU. Output row i depends only on x_q[i] / x_scale[i] / weight, so
@@ -309,6 +318,7 @@ def test_decode_fused_bitidentical_to_cublas_chain(
 
 
 @needs_int_mm
+@needs_fused_tables
 def test_decode_tier_routes_exact_m_only(monkeypatch):
     """The decode fused tier must fire only at exact M=64/128 on table
     shapes; every other decode size (17/32/72/96/255 — the cudagraph
@@ -349,6 +359,7 @@ def test_decode_tier_routes_exact_m_only(monkeypatch):
 
 
 @needs_int_mm
+@needs_fused_tables
 def test_warm_key_distinguishes_decode_and_prefill_cfg():
     """A warmed prefill specialization must not green-light an unwarmed
     decode tile inside a cudagraph capture: Triton JIT compiles carry
@@ -483,10 +494,12 @@ def test_pre_resolved_ops_survive_fullgraph_compile():
     quant = CachedOp("dynamic_per_token_quant_int8")
     mm = CachedOp("w8a8_dynamic_per_token_linear")
     assert quant.pre_resolve() == "default.flagos_bare"
-    assert mm.pre_resolve() == "default.flagos_intmm"
+    assert mm.pre_resolve() == DEFAULT_W8A8_IMPL
 
     x = torch.randn(4, 64, device="cuda", dtype=torch.bfloat16)
-    w8 = torch.randint(-127, 128, (64, 32), device="cuda", dtype=torch.int8)
+    # K=64,N=32；沐曦布局契约为 [N,K]（mctlass 承载，见 w8a8/mctlass_mm.py）
+    w8_shape = (32, 64) if IS_METAX else (64, 32)
+    w8 = torch.randint(-127, 128, w8_shape, device="cuda", dtype=torch.int8)
     ws = torch.rand(32, device="cuda")
 
     def fn(x):
@@ -602,7 +615,7 @@ def test_dispatch_resolves_intmm_impl_by_default():
 
     impl_id = manager.get_selected_impl_id("w8a8_dynamic_per_token_linear")
 
-    assert impl_id == "default.flagos_intmm"
+    assert impl_id == DEFAULT_W8A8_IMPL
 
 
 @needs_int_mm
@@ -695,7 +708,8 @@ def test_apply_weights_end_to_end_through_dispatch(monkeypatch):
 
     layer = SimpleNamespace(
         weight=torch.nn.Parameter(
-            checkpoint_weight.t().contiguous().cuda(), requires_grad=False
+            (checkpoint_weight.contiguous().cuda() if IS_METAX
+             else checkpoint_weight.t().contiguous().cuda()), requires_grad=False
         ),
         weight_scale=torch.nn.Parameter(
             weight_scale.to(torch.float32).cuda(), requires_grad=False
