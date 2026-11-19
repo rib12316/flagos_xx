@@ -116,6 +116,51 @@ triton_unified_attention.py`（wrapper `unified_attention` L780 起；kernel
   VLLM_FL_ATTN_SPLITKV 路由开关），形态固定 §3 表格四行，CSV 列沿用。
 - 验收判据见 §9。
 
+### 7A. 无卡阶段已知风险清单（5 条与预案）——2026-11-19 无卡开发交付
+
+> 交付物：`vllm_fl/dispatch/backends/vendor/iluvatar/attn_splitkv.py`（kernel +
+> hop1 路由 + 自管缓冲）、`tests/unit_tests/attention/test_splitkv_decode.py`
+> （诊断分层单测）、probe suite `segm32`/`splitkv`（§12.4/§13.4 口径）。
+> 变体阶梯已实现为 `VLLM_FL_ATTN_SPLITKV_VARIANT`（0=基线/1=双缓冲默认/
+> 2=persistent/3=宽加载），真机一条命令 A/B，不改代码。
+
+1. **V1 手动预取在 flagtree 3.6 的编译行为未知**（寄存器压力/smem 上限）。
+   预案：G 组大小可降档（`VLLM_FL_ATTN_SPLITKV_GROUP` 3→2→1）；smoke 层
+   单测 2-3min 内暴露编译失败；编译不过 → `VARIANT=0` 判死 V1 不修，
+   V2/V3 顶上。**绝不开 num_stages 替代**（§2 前科 2603µs）。
+2. **V3 宽 descriptor 的页相邻性假设**：block_table 乱序时相邻页不物理相邻
+   → 运行时逐对探测（page[j+1]==page[j]+1），不满足自动回落 16 宽加载
+   （不依赖 host 预判）；若 flagtree 对 [32,128] desc 加载编译失败 → V3
+   判死（§13.3.3 本来就是最后优先级）。
+3. **wrapper 签名漂移**：hop1 按名提取 kwargs（triton_attn.py L642-675 实测
+   全 kwargs 调用）；若 vllm 版本变动改位置传参 → `_route_decision` 返回
+   "qkv 非张量" 等原因字符串，DEBUG=1 可见，行为是**安全透传**（不会算错，
+   只会不生效）。判据：serve 日志 grep `fl.attn-splitkv`（首启用行）。
+4. **cudagraph 捕获期的段数查表与缓冲分配**：split=f(bs,kv) 纯函数，
+   capture 期定死；工作缓冲惰性分配发生在该 graph 首次 capture 调用内
+   （sample_filter_mode 同模式，落 capture pool 后地址跨 replay 稳定）。
+   风险点是**捕获后缓冲增长**（bs 变大）：若出现，日志有「工作缓冲增长」行
+   → 需重 capture 才安全；预案：serve 形态 bs≤64 且缓冲按 max 增长只发生
+   在 capture 阶段序列（vllm 按 capture sizes 从小到大 capture，最后一次
+   分配即最大，之后 replay 不再增长）。
+5. **V2 persistent 与 16 SM 占用互作用**：SEGS_PER_CTA=4 把 CTA 数缩 4×
+   （bs32/kv16K/n32：2048→512 CTA ≈ 32/SM wave 2），若占用不足反而劣化
+   → probe `--variants 2` 单臂 20min 内出数；劣化即弃 V2，无代码风险。
+
+### 7B. 真机 debug 预案（症状→定位→修复→回退；目标：6h 内 debug ≤1h）
+
+| 类 | 症状 | 定位（命令/方法） | 修复 | 回退 |
+|---|---|---|---|---|
+| A1 | 某 variant 编译失败（smoke 层即炸） | 看报错 construct：smem/space vs UnsupportedXxx | V1 降 GROUP；确认无链式 `or`（kernel 已规避） | `VARIANT=0`，该 variant 判死 |
+| A2 | TD desc 路径 AttributeError | DependencyFinder 前科（iluvatar.py stub 只护 triton<3.3；本栈 3.6 有真符号） | `VLLM_FL_ATTN_SPLITKV_TD=0` 强制指针加载 | — |
+| B1 | parity 均匀 ~1e-3 差异 | test 输出 max_rel 分布（mean/p50/p99） | 无需修（floating 归约顺序，非 bit-exact 已知） | — |
+| B2 | 个别 (token,head) 大误差 | test 失败自动 dump：live_splits + 各 split 的 M/L/|acc|，按 stage2 归并公式手验 | 定位到 stage1（partial 错）或 stage2（合并错）后单点修 | `VLLM_FL_ATTN_SPLITKV=0` |
+| B3 | 全错 | 先查 bt/stride 传参（dump 有 shape）；跑 test_smoke_vs_torch_reference 仲裁（判定对照自身错误） | 修 host 侧传参 | 同上 |
+| C1 | 路由不生效 | serve 日志 grep `fl.attn-splitkv`；`VLLM_FL_ATTN_SPLITKV_DEBUG=1` 看逐次决策 | pip provenance 纪律（F5：`pip show vllm-fl`+direct_url） | — |
+| C2 | graph 捕获失败 | 检查是否捕获中新分配（日志「工作缓冲增长」出现在 capture 后） | 预热一次再 capture | `=0` 回 B 臂 |
+| D1 | T1 未达 1.15× | probe `--suite splitkv --variants 0,1,2,3` 一条命令全矩阵 | 只切 env 不改代码；§8 时间盒 30min 纪律 | 数据结案流程（§13.4） |
+| E1 | EngineCore 死亡时钟 | §11 纪律 | 每场景独立新鲜 serve | — |
+
 ## 8. 次日 6h 真机验证计划（按序，含时间盒）
 
 1. **T0 编译/装载自检（15min）**：`pip install --no-deps --no-build-isolation

@@ -118,3 +118,55 @@ t64 慢 45-58%。本卡偏好「多而小 CTA」（与 ② grid64、⑤ prefill 
   臂**差 16%**）——**①×④ 组合互毁**（TD 加载 × int8 descale 路径）；prefill
   最优轮 5963（−5.4%）。**结论：不可同开，推荐 ②+⑤+④ 或 ②+⑤+① 二选一。**
 - 交付文档：docs/d3-dev-delivery.md。六项完成，**停，等用户明示官方 bench/105 题**。
+
+## ⑥ 复活：无卡开发自写 split-KV kernel（2026-11-19，无卡会话——代码交付，待真机）
+
+背景：交接书 docs/splitkv-kernel-handoff.md（11-18 夜）+ §12/§13 补强数据推翻
+「⑥ 数据结案」的两个前提——TD 态段数反转（n16→n32@kv16K 1.27×）与
+CTA 标度饱和点（3072 CTAs 峰值、缺口本质 = per-warp MLP）。按 §12.4 prompt
+（经 §13.4 修正：任务 A 缩减为 segm32 三点复测、任务 B 主攻）执行无卡开发。
+
+交付物：
+- `vllm_fl/dispatch/backends/vendor/iluvatar/attn_splitkv.py`：stage1/stage2
+  两个裸 jit kernel + hop1 路由（attn_launch_config 两跳模式）+ 自管工作缓冲
+  （sample_filter_mode 模式，按 token 索引——修掉上游 #48076 per-seq 分配根因）
+- `tests/unit_tests/attention/test_splitkv_decode.py`：诊断分层单测
+  （smoke/boundary/scatter/forced_splits/wrapper + torch 三方仲裁 + 失败自动
+  dump per-(token,head) partial；文件头写真机 T0 命令序列与失败二分路径）
+- probe：suite `segm32`（P1 三点 kv∈{16500,17000,17408} 平均 + n16/n32 ×
+  §3/§12.2 形态，TD=on graph 口径，末尾自动打印 P1 生死判据）与 suite
+  `splitkv`（`--variants 0,1,2,3` + base 对照臂一条命令扫全阶梯，末尾按
+  §13.3.4 官方形态平均输出 PASS/FAIL）
+- 交接书增 §7A（无卡风险清单 5 条与预案）/§7B（真机 debug 预案表）
+
+设计决策对照 §2 逐条：
+- 「多而小的 CTA」：TILE=16 保持（== BLOCK_SIZE，一 tile 一整页物理连续）；
+  w1s1 硬编码（w2/s2 前科 15-35%/2603µs）；段数来自查表纯函数
+  `resolve_split(bs,kv)`（§12.1/§13.1 数据锚点：kv≤2K 不切→writethrough、
+  4K→8、8K→16、>8K 时 bs≤32→32 否则 16），非运行时调参。
+- grid=(num_seqs, kv_heads, split_jobs)：**零死块**（上游 total_num_q_blocks
+  上界公式在 bs32 时发 48 块其中 16 块 early-return——1536 CTA 口径的来源）；
+  V2 persistent 时 split_jobs=cdiv(NSPLIT, SEGS_PER_CTA=4)。
+- smem 预算：8KB/级（TILE16×128×2B×2），G=3 预取 24KB，≤128KB 留足余量。
+
+设计决策对照 §5 逐条：
+1. 自适应分段 ✓（上述表 + MIN_SEG_TILES=8 下限 + MAX_SPLIT=32 缓冲上限；
+   split==1 → WRITETHROUGH 特化直写、跳过 stage2 launch=FlashInfer D.2/D.3）。
+2. 确定性两段归约 ✓：stage2 per (token, q-head) 向量合并（上游
+   reduce_segments 同数学）；无 atomic；防护照抄（M=-inf/L=1.0 初值、
+   空段不写+act_num_segments 同公式掩码、expsum==0→0）。
+3. 形态纪律 ✓：TILE=16 基线（V3 宽加载是 A/B 臂非默认）；w1s1；smem 预算上。
+4. GQA 打包 ✓：BLOCK_M=16 行 = q_per_kv(8) 有效 + 填充（上游 decode 常量
+   同构），tl.dot [16,128]×[128,16] 保留 MMA；带宽瓶颈下填充行 flops 免费。
+5. 不做清单 ✓：无 prefill/decode 融合；无 FlashDecoding++ 统一 max。
+
+§13.3 假设阶梯实现（VARIANT constexpr + env，capture 期静态）：
+- V0 基线 / V1 手动双缓冲（G 分组先发载后消化，GROUP env 可降档；**不是**
+  num_stages）/ V2 persistent（段循环 + 段内 G=2 分组加载；跨段
+  store 重叠 peel 为二期）/ V3 宽加载（相邻页 [32,128] 单载双 dot，运行时页邻
+  探测自动回落）。
+- 验收线写死在 probe：官方形态（bs32-40/kv16.4-17.4K）平均 ≥1.15× vs
+  base 臂；kv=16384 单点不作判据（§13.3.4）。
+
+无卡自检：py_compile 全过；grep 守卫（无 libentry/atomic/autotune/链式 or）；
+env 默认全 0（默认关闭=A/B 安全）。风险与预案见交接书 §7A/§7B。

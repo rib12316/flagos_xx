@@ -110,6 +110,12 @@ markers = [
     "e2e: marks tests as end-to-end tests",
     "flaggems: marks tests as requiring flag_gems library",
     "functional: marks tests as functional tests",
+    "smoke: splitkv T0 first layer (compile errors surface here)",
+    "boundary_kv: splitkv kv-length boundary cases",
+    "boundary_bs: splitkv batch-size boundary cases",
+    "scatter: splitkv scattered block_table + non-contiguous q",
+    "forced_splits: splitkv forced segment count edge cases",
+    "wrapper: splitkv hop1 routing integration",
 ]
 addopts = "-v --tb=short"
 filterwarnings = [
