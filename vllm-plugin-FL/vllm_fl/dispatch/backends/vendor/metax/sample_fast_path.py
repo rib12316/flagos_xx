@@ -34,32 +34,36 @@ logger = logging.getLogger(__name__)
 _ENABLED = os.environ.get("VLLM_FL_SAMPLE_FAST", "1") == "1"
 _K = max(16, int(os.environ.get("VLLM_FL_SAMPLE_FAST_K", "1024")))
 _MIN_BS = int(os.environ.get("VLLM_FL_SAMPLE_FAST_MIN_BS", "8"))
+_DEBUG = os.environ.get("VLLM_FL_SAMPLE_FAST_DEBUG", "0") == "1"
 _neg_inf = float("-inf")
 
 
 def top_p_filter_fast(logits: torch.Tensor, p: torch.Tensor, k: int = _K):
-    """TOPP-only 快路径。返回过滤后 logits（新张量）；不收敛返回 None。
+    """TOPP-only 快路径 v2（sort 基座）。返回过滤后 logits（新张量）；异常由调用方回退。
 
-    logits: [bs, vocab] fp32，行连续；p: [bs] fp32 (0,1]。
+    v1 教训（20261120 T1）：torch.topk 在 serve 上下文抛
+    "Triton Error [MACA]: memory size or pointer value too large to fit in 32 bit"
+    （离线任何形状/48GB 压力下均不复现 → 弃 topk），v2 改用与 fallback 同源的
+    torch.sort（serve 内每日实测可用）：
+
+        s, _ = logits.sort(-1, descending=True)   # 2.6ms（vendor sort，与 fallback 同引擎）
+        c   = softmax(s).cumsum(-1)               # 降序累计（fallback 数学，方向翻转）
+        τ   = s[每行首个 c≥p 的位置]              # 阈值 = 第 m 大
+        out = logits.masked_fill(logits < τ, -inf) # 免 scatter 全宽回写/免双重 masked_fill
+
+    vs fallback（sort 升序 + softmax + cumsum + masked_fill×2 + scatter 回写 = 9.66ms）：
+    省 scatter（0.75ms）+ 全宽 masked_fill 链（~4ms）+ bool 中间张量，实测口径见 T1。
+    语义差：① 累加序（降序 vs 升序）边界 token 偶差一位；② 并列 τ 全保留 vs 按序截断
+    ——分布等价级（T0 对拍 + 105 题双 gate）。
     """
-    bs, vocab = logits.shape
-    kk = min(k, vocab)
     with torch.no_grad():
-        # 1) 降序 top-k（免全词表 sort；rowmax 即 top-1，免二次全宽 reduction）
-        top_vals, _ = torch.topk(logits, kk, dim=-1)            # [bs,k] 降序
-        rowmax = top_vals[:, :1]                                # [bs,1]
-        # 2) 全词表 softmax 分母（一次 exp-sum，免 sort）
-        ex = torch.exp(logits - rowmax)
-        z = ex.sum(dim=-1, keepdim=True)                        # [bs,1]
-        # 3) top-k 降序累计质量；m = 首达 p 的序数（1-based）
-        pt = torch.exp(top_vals - rowmax) / z                   # [bs,k]
-        ct = pt.cumsum(dim=-1)                                  # 降序累计
-        conv = ct[:, -1] >= p                                   # K 内收敛？
-        if not bool(conv.all()):
-            return None                                         # 病态平坦：整批回退
-        need = (ct < p.unsqueeze(1)).sum(dim=-1)                # [bs] 0..k-1
-        tau = top_vals.gather(1, need.unsqueeze(1))             # 第 m 大（m=need+1）
-        # 4) 阈值过滤：保留所有 >= τ（至少保 top-1，need>=0 ⟹ τ<=rowmax）
+        s, _ = torch.sort(logits, dim=-1, descending=True)      # [bs,V] 降序
+        probs = torch.softmax(s, dim=-1)                        # 与 fallback 同式
+        c = probs.cumsum(dim=-1)                                # 降序累计
+        # 每行保留前缀 = 首个 c≥p 的位置（含）——与 fallback 升序口径逐位对偶
+        need = (c < p.unsqueeze(1)).sum(dim=-1)                 # [bs] 0..V-1
+        need = need.clamp(max=logits.shape[1] - 1)              # 保底：最后一列永不 mask
+        tau = s.gather(1, need.unsqueeze(1))                    # [bs,1] 阈值
         return logits.masked_fill(logits < tau, _neg_inf)
 
 
@@ -78,9 +82,36 @@ def install() -> bool:
 
     orig = _tts.apply_top_k_top_p  # vendor patch 后的 no-triton 分发（或上游）
 
-    stats = {"n": 0, "fallback": 0}
+    stats = {"n": 0, "fallback": 0, "dbg": 0}
+
+    def _dbg(logits, p):
+        """T1 诊断：top-K 质量/耗时/步长（仅 VLLM_FL_SAMPLE_FAST_DEBUG=1 时前 60 次调用）"""
+        import time
+        torch.cuda.synchronize()
+        t0 = time.time()
+        kk = min(_K, logits.shape[1])
+        tv, _ = torch.topk(logits, kk, dim=-1)
+        rm = tv[:, :1]
+        ex = torch.exp(logits - rm)
+        z = ex.sum(dim=-1, keepdim=True)
+        pt = torch.exp(tv - rm) / z
+        ct = pt.cumsum(dim=-1)
+        cmin = ct[:, -1].min().item()
+        cmed = ct[:, -1].median().item()
+        torch.cuda.synchronize()
+        logger.info(
+            "sample_fast DEBUG[%d]: bs=%d stride=%s topK_mass min=%.4f med=%.4f "
+            "attempt=%.2fms", stats["dbg"], logits.shape[0],
+            str(logits.stride()), cmin, cmed, (time.time() - t0) * 1e3)
 
     def _fl_apply(logits, k, p, *args, **kwargs):
+        if _DEBUG and stats["dbg"] < 60 and p is not None and k is None \
+                and logits.is_cuda and logits.ndim == 2:
+            stats["dbg"] += 1
+            try:
+                _dbg(logits, p)
+            except Exception as e:
+                logger.warning("sample_fast DEBUG 失败: %s", e)
         if (p is not None and k is None
                 and logits.is_cuda and logits.ndim == 2
                 and logits.dtype == torch.float32
