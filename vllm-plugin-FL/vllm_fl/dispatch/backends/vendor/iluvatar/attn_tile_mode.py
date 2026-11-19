@@ -30,12 +30,14 @@ _installed = False
 
 
 def install() -> bool:
-    """prefill TILE_SIZE=16（幂等；默认关闭——非 bit-exact，过对拍门后再定）。"""
+    """prefill TILE_SIZE=16（幂等；交付默认开；VLLM_FL_ATTN_TILE=0 显式回退）。"""
     global _installed
     if _installed:
         return True
-    if os.environ.get("VLLM_FL_ATTN_TILE", "0") != "1":
-        logger.info("attn_tile_mode: VLLM_FL_ATTN_TILE 未设为 1，保持上游 TILE=32")
+    # 交付默认开（官方评测命令仅设 VLLM_PLUGINS=fl；对拍 0/16、105 题 0.9714
+    # 已背书）。回退：VLLM_FL_ATTN_TILE=0 显式关闭。
+    if os.environ.get("VLLM_FL_ATTN_TILE", "1") == "0":
+        logger.info("attn_tile_mode: VLLM_FL_ATTN_TILE=0（显式回退），保持上游 TILE=32")
         return False
     try:
         import vllm.v1.attention.ops.triton_unified_attention as _tua

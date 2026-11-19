@@ -49,8 +49,10 @@ def install() -> bool:
     global _installed
     if _installed:
         return True
-    if os.environ.get("VLLM_FL_ATTN_TD", "0") != "1":
-        logger.info("attn_td_mode: VLLM_FL_ATTN_TD=0，保持上游 use_td 决策")
+    # 交付默认开（官方评测命令仅设 VLLM_PLUGINS=fl；对拍 0/16、105 题 0.9714
+    # 已背书）。回退：VLLM_FL_ATTN_TD=0 显式关闭。
+    if os.environ.get("VLLM_FL_ATTN_TD", "1") == "0":
+        logger.info("attn_td_mode: VLLM_FL_ATTN_TD=0（显式回退），保持上游 use_td")
         return False
     try:
         import vllm.v1.attention.backends.triton_attn as _ta
