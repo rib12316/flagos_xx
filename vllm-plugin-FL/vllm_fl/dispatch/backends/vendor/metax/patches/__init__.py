@@ -26,3 +26,17 @@ except Exception as _e:  # pragma: no cover - 永不阻塞 metax 后端装载
     import logging as _logging
     _logging.getLogger(__name__).warning(
         "attn_splitkv_hop install skipped: %s", _e)
+
+# --------------------------------------------------
+# FL D5 采样 top-p torch 快路径（默认开，VLLM_FL_SAMPLE_FAST=0 关）：
+# top-k(1024)+logsumexp 分母+阈值法，替换 vendor 的全词表 sort fallback
+# （bs=64 实测 9.66ms/步 → 目标 ~1.5ms；Triton 路线 ATU 判死，见
+#  results/20261120_c500_reprofiling/sampling_metax.csv）。装载于
+# topk_topp_sampler patch 之后，链：快路径 → vendor no-triton → pytorch。
+try:
+    from .. import sample_fast_path
+    sample_fast_path.install()
+except Exception as _e:  # pragma: no cover - 永不阻塞 metax 后端装载
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "sample_fast_path install skipped: %s", _e)
