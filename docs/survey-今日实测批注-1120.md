@@ -19,7 +19,7 @@
 
 ## 二、survey 中仍然成立且可做的（按性价比排序）
 
-1. **#417 模式：AttentionCGSupport 误报→decode 被降级 PIECEWISE**——与我方观测**完全吻合**（配置 FULL_AND_PIECEWISE、捕获日志仅 PIECEWISE）。已派 B 机（T-cg）：查 MACA 后端声明；若误报，插件内改声明 = 白捡（上限 ~4%+步进平滑）。**survey 独立验证了此项的高价值先例（昆仑xon 后端同病）**
+1. ~~#417 模式：AttentionCGSupport 误报→decode 被降级~~ **已关账（B 机 32d3262，11-20）**：decode FULL 捕获 37 条实锤（A 机此前看到的 PIECEWISE 进度条只是 piecewise 阶段）+ async scheduling 日志明文已启用——**双项均最优态，无静默降级**；昆仑xon 的 #417 病在 MACA 后端不存在。教训：进度条≠全集，结论需逐条实证
 2. **D13 norm+quant 融合**（已派 B）：survey 的融合链主张的可执行子集
 3. **vendor 问题清单增强**：拿 FlashMLA 布局对照问沐曦（scale 紧邻数据 vs 独立张量；332GB/s 是否可修）
 4. **报告写作素材**（30% 创新分）：#671 的「内核优化 vs 调参」论证模板、KernelGen 五芯调参叙事、我方台账 §9 八方向负判决+三条方法论铁律（L2-warm/graph 口径/serve trace 准）——"证明前沿"的审计链本身是强报告内容
