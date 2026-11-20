@@ -141,7 +141,7 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
         # 在 norm 侧），dtype 是 dynamo 合法 guard、每 shape 固定 → graph 安全。
         # 属性须直读（类级默认见模块头注释）——getattr-default 在 dynamo
         # fullgraph 下不可用。
-        if layer._fl_expects_prequant and x.dtype == torch.int8:
+        if x.dtype == torch.int8 and layer._fl_expects_prequant:
             x_q = x
             x_scale = layer._fl_prequant_norm._fl_d13_scale[: x.shape[0]]
             output = _w8a8_scaled_mm(

@@ -48,10 +48,7 @@
   * ``VLLM_FL_FLAGOS_BLACKLIST=fused_add_rms_norm_quant_int8``（现有机制，
     utils.use_flaggems_op）：配对仍装、kernel 回退 reference torch 两步
     （位相同）——用于隔离「kernel 数值疑虑」vs「接线问题」。
-- ``VLLM_FL_D13_M_FUSE_MAX`` 覆盖融合 M 上限；默认取
-  ``compilation_config.max_cudagraph_capture_size``（= min(max_num_seqs*2,
-  512)，compilation.py 默认公式）——恰覆盖 decode 全部 padded M 档，排除
-  prefill/mixed（M 达 max_num_batched_tokens）。
+- ``VLLM_FL_D13_M_FUSE_MAX`` 默认 2048，覆盖 C500 实测的动态编译预热形状。
 
 位精确声明：融合路径 GEMM 输入 (q, scale) 与 stock 两步链 bitwise 一致
 （T0：scripts/d13/norm_quant_fuse_t0.py；接线版对拍 scripts/d13/
@@ -106,29 +103,18 @@ def _env_enabled() -> bool:
     return fusion_enabled("VLLM_FL_D13_NORM_QUANT")
 
 
-def _default_m_fuse_max(vllm_config) -> int:
-    import os
+def _default_m_fuse_max() -> int:
+    from vllm_fl import envs
 
-    raw = os.environ.get("VLLM_FL_D13_M_FUSE_MAX", "")
-    if raw:
-        try:
-            v = int(raw)
-            if v > 0:
-                return v
-        except ValueError:
-            logger.warning(
-                "VLLM_FL_D13_M_FUSE_MAX=%r 非法，忽略（用默认公式）", raw)
+    raw = envs.VLLM_FL_D13_M_FUSE_MAX
     try:
-        cs = getattr(
-            vllm_config.compilation_config, "max_cudagraph_capture_size", None)
-        if isinstance(cs, int) and cs > 0:
-            return cs
-    except Exception:  # pragma: no cover - config shape varies in tests
+        limit = int(raw)
+        if limit > 0:
+            return limit
+    except ValueError:
         pass
-    try:
-        return min(vllm_config.scheduler_config.max_num_seqs * 2, 512)
-    except Exception:  # pragma: no cover
-        return 256
+    logger.warning("Invalid VLLM_FL_D13_M_FUSE_MAX=%r, using 2048", raw)
+    return 2048
 
 
 def _pairable(norm, consumer) -> bool:
@@ -208,7 +194,7 @@ def install_d13_pairings(model: torch.nn.Module, vllm_config) -> int:
     except Exception:  # pragma: no cover - never block model load
         logger.exception("D13 pre_resolve failed, pairing anyway")
 
-    m_fuse_max = _default_m_fuse_max(vllm_config)
+    m_fuse_max = _default_m_fuse_max()
     try:
         buf_rows = max(
             vllm_config.scheduler_config.max_num_batched_tokens, m_fuse_max)

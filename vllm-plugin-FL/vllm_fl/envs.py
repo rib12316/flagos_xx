@@ -6,10 +6,13 @@ from typing import Any, Callable
 from vllm_fl.utils import use_flaggems
 
 
-def fusion_enabled(name: str) -> bool:
-    return os.getenv(name, os.getenv("VLLM_FL_FUSION_BUNDLE", "0")).lower() in (
-        "1", "true", "on",
-    )
+def fusion_enabled(name: str, vendor: str | None = None) -> bool:
+    if vendor is None:
+        from vllm.platforms import current_platform
+
+        vendor = getattr(current_platform, "vendor_name", "")
+    bundle = os.getenv("VLLM_FL_FUSION_BUNDLE", "1")
+    return vendor == "metax" and os.getenv(name, bundle).lower() in ("1", "true", "on")
 
 
 fl_vllm_environment_variables: dict[str, Callable[[], Any]] = {
@@ -40,10 +43,9 @@ fl_vllm_environment_variables: dict[str, Callable[[], Any]] = {
     # 总门："0" = 模块图零改动，完整回退 stock 两步链（一键回退）
     "VLLM_FL_D13_NORM_QUANT": lambda: fusion_enabled("VLLM_FL_D13_NORM_QUANT"),
     "VLLM_FL_FA_ROPECAT": lambda: fusion_enabled("VLLM_FL_FA_ROPECAT"),
-    # 融合启用的 M 上限（decode-only 路由；未设 = 取
-    # compilation_config.max_cudagraph_capture_size = min(max_num_seqs*2,512)）
+    # C500 的动态编译图在 M=2048 预热。
     "VLLM_FL_D13_M_FUSE_MAX": lambda: os.environ.get(
-        "VLLM_FL_D13_M_FUSE_MAX", ""),
+        "VLLM_FL_D13_M_FUSE_MAX", "2048"),
 }
 
 

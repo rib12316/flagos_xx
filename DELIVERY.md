@@ -1,6 +1,6 @@
 # final-submition 双平台交付汇总
 
-2026-11-20 汇总。运行源码 `vllm-plugin-FL/` 和 `FlagGems/` 取自双卡验收标签 `delivery-final-1119`（`ffd0daf`）。4K、16K 列均为官方总吞吐，单位 tok/s。
+2026-11-20，C500 在 `delivery-final-1119`（`ffd0daf`）之上集成四项融合。当前 C500 版本待测官方 4K、16K 和 105 题精度。下表为上一封板版本的官方结果，吞吐单位 tok/s。
 
 | 平台 | 已验收的默认优化 | 4K | 16K | 105 题精度 |
 |---|---|---:|---:|---:|
@@ -9,7 +9,21 @@
 
 官方测量记录见 [C500 汇总](results/20261119_d4_metax_port/final/SUMMARY.md) 和 [V150 逐轮结果与精度](results/d3_official_1116_2222/)。
 
-C500 四项融合在 32、64 条请求的小样本中分别提速 2.86%、1.29%，4 条贪心样例中有 3 条输出分叉，官方精度待验。候选实现保留于 `feat/c500-fusion-bundle@a3b32dd`。V150 的 P1 重标定也处于候选阶段，见 `feat/v150-attn-bm@7574909`。TileLang 探索已结束。[C500 融合逐轮数据与输出](results/20261120_fusion_bundle/)
+## C500 运行清单
+
+| 调用路径 | `final-submition` 的默认行为 |
+|---|---|
+| D2 模型与激活量化 | SmoothQuant + RTN 再生 W8A8 权重，线性层和 lm_head 使用逐通道权重 scale 与逐 token 激活 scale。 |
+| D4 矩阵乘 | `mctlassEx` 承载 INT8 GEMM，直接使用 `[N,K]` 权重布局。 |
+| F-a 位置编码 | 匹配 NeoX Q/K RoPE，将两路旋转与拼接合成一次 kernel 调用。 |
+| D13 残差归一化与量化 | 83 处装载期配对，直接为下游 W8A8 GEMM 生成 INT8 和 scale，默认 M 上限为 2048。 |
+| A-H4 其余归一化 | `fused_add_rms_norm` 优先调用沐曦 `vllm_c`，保留 `native` 后备。 |
+| F-c Decode 输出 | 在实测的 BF16 GQA 布局上通过分组视图让 MACA Flash 直接写入目标输出。 |
+| Attention 与调度 | MACA Flash prefill/decode，D1 准入 watermark 0.06，异步调度、decode 全图及 mixed 分段图。 |
+
+四项融合默认在 `metax` 启用，V150 走原路由。在 C500 上显式设置 `VLLM_FL_FUSION_BUNDLE=0` 并清除单项覆盖可回退四项融合。已显式开启四项的 4K 小样本（32/64 条请求）总吞吐分别提高 2.86%/1.29%，4 条贪心样例中有 3 条输出分叉。[逐轮数据与输出](results/20261120_fusion_bundle/)
+
+官方复测使用文末 C500 启动命令，4K 为 `[4096,1024,64,256]`，16K 为 `[16384,1024,64,128]`，每形状独立起服、四轮丢首取均值；精度为 math_500 L3 全部 105 题，门槛 0.95。D5 采样、D6 split-KV、D7 手写 prefill、D8 INT8 KV、D9 quant 变体均为归档实验。D10 方差、D11 机会项、D12/host、F-b、SiLU+quant 与 F-e 为诊断和筛选记录。TileLang 已结项。
 
 ## 天数侧终局状态（本分支基线 = 9ddaa0f + ①⑤ 默认翻转）
 
@@ -49,7 +63,7 @@ vllm serve /workspace/MiniCPM5-2B-w8a8-v2 \
   --max-model-len 131072
 ```
 
-## 沐曦侧待办（✅ 1-4 已于 2026-11-19 完成，见下「沐曦侧终局」；⬜ 5 = 出包待办）
+## 11 月 19 日封板记录
 
 1. ✅ `git merge feat/d4-metax-port`（`4eb72df` 入本分支；bedf8ca mctlassEx w8a8 +
    c948594 接线，保留默认开语义）
@@ -80,7 +94,7 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
   在案）——原「逐位 diff 对照」待办就此关闭
 - ttft 双场景大优（上表）
 
-## 沐曦侧终局（2026-11-19 23:20 完成，官方形态实测）
+## 沐曦上版官方成绩（2026-11-19 23:20）
 
 - **形态**：`VLLM_PLUGINS=fl vllm serve /workspace/MiniCPM5-2B-w8a8-v2 --port 9031 --served-model-name minicpm --gpu-memory-utilization 0.85 --max-model-len 131072`（零附加 env、**无 --compilation-config**，每场景新鲜 serve、4 轮丢首）
 - **4K = 6399.21 tok/s**（vs 沐曦纯净基线 3786.30 = **+69.0%**；轮值 6927.95/5883.03/6386.65）

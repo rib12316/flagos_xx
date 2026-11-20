@@ -212,9 +212,7 @@ class PlatformFL(Platform):
         """
         from vllm_fl.envs import fusion_enabled
 
-        if not fusion_enabled("VLLM_FL_IR_NORM"):
-            return super().get_default_ir_op_priority(vllm_config)
-        if cls.vendor_name != "metax":
+        if not fusion_enabled("VLLM_FL_IR_NORM", cls.vendor_name):
             # 仅沐曦栈启用：mcoplib 装载与 T0 判决均以 metax 为准；其它 vendor
             # 维持上游默认（iluvatar/ascend 天然被 vllm_c 的 CUDA_ALIKE supported
             # 排除；nvidia 上游 inductor 态有意用 native，不越权改其行为）。

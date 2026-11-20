@@ -2,7 +2,7 @@
 
 > 队伍 infragogogo（xxinfra）｜MiniCPM5-2B 推理吞吐优化（total tokens/s，4K/16K 双场景）｜沐曦 C500 64GB + 天数 BI-V150 32GB｜截止 2026-11-20 23:59
 
-`final-submition` 汇总两台机器通过官方吞吐与精度验收的版本。双卡成绩、默认优化、权重转换和启动命令见 [DELIVERY.md](DELIVERY.md)。
+`final-submition` 是 C500 全量融合待评测版本，四项融合在沐曦默认启用。双卡历史成绩、当前优化清单、权重转换和启动命令见 [DELIVERY.md](DELIVERY.md)。
 
 ## 仓库定位（重要）
 

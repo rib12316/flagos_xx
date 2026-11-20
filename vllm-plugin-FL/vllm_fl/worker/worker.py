@@ -230,10 +230,11 @@ class WorkerFL(WorkerBase):
 
         try:
             from vllm_fl import envs as fl_envs
-            from vllm_fl.compilation.passes.rope_cat_fusion import (
-                FLRopeCatFusionPass,
-                make_rope_cat_pass,
-            )
+            if fl_envs.VLLM_FL_FA_ROPECAT:
+                from vllm_fl.compilation.passes.rope_cat_fusion import (
+                    FLRopeCatFusionPass,
+                    make_rope_cat_pass,
+                )
 
             _cc = vllm_config.compilation_config
             _key = "post_grad_custom_post_pass"

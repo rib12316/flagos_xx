@@ -16,10 +16,13 @@ for flag in "${flags[@]}"; do
     arm="$trial/arm$flag"
     mkdir "$arm"
     cd "$arm"
-    export VLLM_CACHE_ROOT="$arm/cache" VLLM_FL_FA_PROBE="$arm/fa.log" VLLM_FL_FUSION_BUNDLE="$flag"
-    # A single graph is traced at the 2048-token warmup size. Include this size
-    # so the D13 branch survives tracing. Default server settings stay separate.
-    export VLLM_FL_D13_M_FUSE_MAX=2048
+    export VLLM_CACHE_ROOT="$arm/cache"
+    unset VLLM_FL_FUSION_BUNDLE VLLM_FL_D13_M_FUSE_MAX VLLM_FL_FA_PROBE
+    case "$flag" in
+        default) ;;
+        0|1) export VLLM_FL_FUSION_BUNDLE="$flag" VLLM_FL_FA_PROBE="$arm/fa.log" ;;
+        *) exit 2 ;;
+    esac
     for i in {1..30}; do mx-smi | grep -q 'no process' && break; sleep 2; done
     mx-smi | grep 'no process'
     python3 -m vllm.entrypoints.openai.api_server --model "$model" --port 9031 \
@@ -34,15 +37,19 @@ for flag in "${flags[@]}"; do
     curl -fsS -m 3 http://127.0.0.1:9031/health
     curl -fsS -m 180 -H 'Content-Type: application/json' -d '{"model":"minicpm","prompt":["The capital of France is","What is 7 times 8?","写一句关于秋天的话。","def add(x, y):"],"temperature":0,"seed":0,"max_tokens":24,"return_token_ids":true}' \
         http://127.0.0.1:9031/v1/completions >smoke.json
-    if [[ $flag == 1 ]]; then
+    if [[ $flag != 0 ]]; then
         grep -E 'F-c grouped decode out active|paired.*83|83.*pair|Final IR op priority' serve.log | tail -5
         grep -q 'F-c grouped decode out active' serve.log
-        if ! grep -Eq 'CALL_DONE matched=[1-9]' fa.log; then
+        grep -q 'paired 83 sites (m_fuse_max=2048' serve.log
+        grep -Fq "fused_add_rms_norm=['vllm_c', 'native']" serve.log
+        if [[ ! -f fa.log ]] || ! grep -Eq 'CALL_DONE matched=[1-9]' fa.log; then
             rg -q -a 'torch.ops.vllm.fl_rope_qk_cat.default' "$arm/cache/torch_compile_cache"
         fi
         rg -q -a 'torch\.ops\.vllm_fl\.d13_norm_quant\.default\(' "$arm/cache/torch_compile_cache"
     fi
-    timeout 1800 python3 -u "$root/vllm-plugin-FL/benchmarks/benchmark_throughput_serve.py" --model "$model" --served-model-name minicpm --port 9031 --test-cases '[[4096,1024,64,32],[4096,1024,64,64]]' >bench.log 2>&1
+    if [[ ${FUSION_SMOKE_ONLY:-0} != 1 ]]; then
+        timeout 1800 python3 -u "$root/vllm-plugin-FL/benchmarks/benchmark_throughput_serve.py" --model "$model" --served-model-name minicpm --port 9031 --test-cases '[[4096,1024,64,32],[4096,1024,64,64]]' >bench.log 2>&1
+    fi
     trap - EXIT
     stop_server
 done

@@ -5343,11 +5343,12 @@ class ModelRunnerFL(
             # 详见 vllm_fl/quantization/w8a8/d13_norm_quant.py 头注）。必须在
             # 下方 GraphWrapper/compile 包裹之前——dynamo/capture 要看到已
             # patch 的模块。
-            from vllm_fl.quantization.w8a8.d13_norm_quant import (
-                install_d13_pairings,
-            )
+            from vllm_fl.envs import fusion_enabled
 
-            install_d13_pairings(self.model, self.vllm_config)
+            if fusion_enabled("VLLM_FL_D13_NORM_QUANT"):
+                from vllm_fl.quantization.w8a8.d13_norm_quant import install_d13_pairings
+
+                install_d13_pairings(self.model, self.vllm_config)
             if (drafter := getattr(self, "drafter", None)) and (
                 drafter_model := getattr(drafter, "model", None)
             ):

@@ -43,6 +43,7 @@ env 门：VLLM_FL_FA_ROPECAT=0 完全不注入。无运行时分支 → cudagrap
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import torch
@@ -69,11 +70,12 @@ def _probe(msg: str) -> None:
     smoke #2/#3/#4 的「零痕迹」无法区分「没调用」与「调用了不匹配」。
     路径可被 VLLM_FL_FA_PROBE 覆盖；任何异常静默（探针绝不打断编译）。
     """
-    import os
     import time
 
+    path = os.environ.get("VLLM_FL_FA_PROBE")
+    if not path:
+        return
     try:
-        path = os.environ.get("VLLM_FL_FA_PROBE", "/tmp/fa_pass.log")
         with open(path, "a") as f:
             f.write(
                 f"[{time.strftime('%H:%M:%S')} pid={os.getpid()}] {msg}\n"
@@ -356,6 +358,8 @@ class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
     def __call__(self, graph) -> None:
         """文件探针（不经 logger 树——worker.py 的 vllm logger 会吞 INFO）：
         分辨「pass 没被调用」vs「被调用但图形态不匹配」。"""
+        if not os.environ.get("VLLM_FL_FA_PROBE"):
+            return super().__call__(graph)
         try:
             nodes = list(graph.nodes)
             cats = [n for n in nodes if "cat" in str(getattr(n, "target", ""))]
