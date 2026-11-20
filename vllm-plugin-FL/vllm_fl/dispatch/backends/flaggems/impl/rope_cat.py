@@ -104,8 +104,17 @@ def _rope_qk_cat_kernel(
     m_q = is_q & (e >= 0)
     m_k = (~is_q) & (e >= 0)
     out_dt = q_out_ptr.dtype.element_ty
-    qoff = tok * Q_ROW + h * HEAD
-    koff = tok * K_ROW + (h - NQ) * HEAD
+    # 偏移钳 0（ATU 加固）：Q 程序的 k 偏移、K 程序的 q 偏移不再出现负值。
+    # 掩码 lane 本就不写，钳 0 不改数学（首跑 t0.log 已实证原版 bitwise 全绿），
+    # 只消灭负地址算术这一 MACA 风险类（topk_topp 前科：编译过、运行期 Xnack
+    # trap）。钳后所有指针恒在各自张量界内。
+    # int32 界核查：地址乘积上限 = 2047*2560+17*128+127 ≈ 5.24M（qkv）、
+    # 2047*2048 ≈ 4.19M（q_out）、131071*128 ≈ 16.8M（cos_sin，posw 为 i64）
+    # ——均 ≪ 2^31，M ≤ 2048 下无 32 位溢出。
+    qh = tl.where(is_q, h, 0)
+    kh = tl.where(is_q, 0, h - NQ)
+    qoff = tok * Q_ROW + qh * HEAD
+    koff = tok * K_ROW + kh * HEAD
     tl.store(q_out_ptr + qoff + e, o1.to(out_dt), mask=m_q)
     tl.store(q_out_ptr + qoff + HALF + e, o2.to(out_dt), mask=m_q)
     tl.store(k_out_ptr + koff + e, o1.to(out_dt), mask=m_k)

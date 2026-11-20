@@ -269,7 +269,12 @@ def main():
     for M in (32, 64, 2048):
         torch.manual_seed(999 + M)
         qkv = (torch.randn(M, QKV_ROW, device=DEV) * 0.5).to(torch.bfloat16)
-        pos = torch.randint(0, 1 << 20, (M,), device=DEV, dtype=torch.int64)
+        # 位置必须 < cos_sin 行数 131072。首跑 ATU 崩溃根因：本行曾用
+        # randint(0, 1<<20)，gather 越过 33MB cache → _ref_cat3 Xnack ATU
+        # Fault（t0.log 实证 trapping kernelName=_ref_cat3）。生产语义只回卷
+        # 负位置、无上界钳制，故采样域必须合法。取 16K = serve 真实上下文
+        # 量级，L2-warm 口径两臂同域。
+        pos = torch.randint(0, 16384, (M,), device=DEV, dtype=torch.int64)
         q_out = torch.empty(M, NQ, HEAD, device=DEV, dtype=torch.bfloat16)
         k_out = torch.empty(M, NKV, HEAD, device=DEV, dtype=torch.bfloat16)
 

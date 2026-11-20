@@ -93,6 +93,30 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
   cat_3/cat_4 消失、fl_rope_qk_cat 出现 ~42 次/步）→ T1 quick 双形状三轮中位
   ≥+0.3% 才立项合入。
 
+## 3.5 首跑 T0 事故与判决（2026-11-20 13:05，results/20261120_fa_ropecat/t0.log）
+
+首跑在首个 bench 调用处 Xnack ATU Fault 崩溃。**日志逐行给出的判决：**
+
+1. **融合核洗清嫌疑且已证位精确**：崩溃前正确性段完整跑完——
+   `[corr M=32] q bitwise=True (maxdiff 0) | k bitwise=True (maxdiff 0)`，
+   `[corr M=64]` 同（含负位置回卷用例 pos=-5/-131069）。**融合核 vs 现役两核
+   逐字拷贝 = 逐位相等，两形状全绿。**
+2. trap 定位（MCR 日志）：`trapping: kernelName: _ref_cat3, trapType: Xnack
+   Error/ATU Fault(0x8)`——**肇事核是对照臂**（inductor 逐字拷贝），非融合核。
+3. **根因 = T0 harness bug（计时段 positions 采样域，已修）**：曾用
+   `randint(0, 1<<20)`（最高 ~1M），而 cos_sin_cache 只有 131072 行 →
+   gather 越过 33MB 缓冲 ~268MB → ATU Fault。正确性段用 `randint(0,4096)`
+   所以无恙。生产语义只回卷负位置、无上界钳制（真实 positions 恒 < 131072），
+   两核同语义、同会越界——**这是 harness 采样域错误，不是任何 kernel 的缺陷**。
+   已改为 `randint(0, 16384)`（serve 真实上下文量级，两臂同域）。
+4. `[corr native-fp32 M=32] maxdiff=0.0078125`：≈ 1 bf16 ulp（幅度 ~2 处
+   ulp=2^-8），与 fma 收缩 vs eager 分立 mul 的单次舍入差一致——信息位
+   预期内（primary 判据是 vs inductor 核的 bitwise）。
+5. 顺手加固：kernel 偏移钳 0（`qh = where(is_q, h, 0)`、`kh = where(is_q,
+   0, h-NQ)`），消灭 Q 程序 k 偏移的负地址算术——首跑证明掩码负偏移在本
+   形状不 trap，但属 MACA 已知风险类（topk_topp 前科），钳 0 不改数学
+   （掩码 lane 本就不写）、零成本上保险。重跑对钳后版本重新 bitwise 验证。
+
 ## 4. CPU 干跑实证（无卡，FakeTensorMode，不触设备）
 
 | 检查 | 结果 |
@@ -103,8 +127,9 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
 | pattern 匹配模拟生产图（split→forward_static→view，view_to_reshape 规范化） | **MATCH_COUNT=1**，替换为 vllm.fl_rope_qk_cat.default |
 | 替换后图 fake 执行 | 输出 (5,16,128)/(5,2,128) bf16，Q'/K' 连续、v 保持 strided view（stride 2560）——与生产布局一致 |
 
-未验证（需上机）：triton 核编译/运行、真实 dynamo postgrad 图匹配（模拟图用
-pm.fwd_only 追踪，与 aot 分解表理论同构——上游同款风险）、位精确性、耗时。
+未验证（需上机）：真实 dynamo postgrad 图匹配（模拟图用 pm.fwd_only 追踪，
+与 aot 分解表理论同构——上游同款风险）、耗时。位精确与核运行**已在首跑实证**
+（§3.5），待钳 0 版本复证。
 
 ## 5. 上机申请（精确命令）
 
