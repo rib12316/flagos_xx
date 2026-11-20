@@ -73,24 +73,38 @@ graph 相容：分支条件 = env + 装载期 `import flash_attn_2_cuda` 符号�
 
 ## 3. 上机验证申请（主会话执行；GPU，本 agent 未跑）
 
+**首跑失败与修正（11-20 13:2x，T0 v2）**：首版 T0 以 `empty_like(wrapper返回值)` 构造
+out，被 C++ 拒以 `out must have shape (batch_size, seqlen_q, num_heads, head_size_og)`。
+反汇编复核（`mha_fwd_kvcache` @0x1b5ec90；返回 `std::vector<Tensor>` 走 sret，故
+rsi=q、rdx=kcache、rcx=vcache、r8/r9=k/v、栈 0x38=block_table、**0x48=out optional**）
+确认 out 检查链：`dtype==q.dtype → is_cuda → stride(-1)==1 →
+ArrayRef::equals(out.sizes(), {q.size(0..3)}, len=4)`——out 必须**恰好 4 维且逐维
+等于 q 形状**。而 MACA wrapper 对 seqlen_q==1 的返回是 **3D [bs,H,D]**（vllm
+`reshape_attn_output_for_spec_decode` 的 `dim()==3: Already in the correct shape`
+分支即为此存在），`empty_like(ref)` 得 3D → 维数 3≠4 必炸——**T0 脚本 bug，非补丁
+bug**：serve 补丁传的是 `output[:n].view(*decode_query.shape)` = 4D [32,1,16,128]
+（= q 形状），正是检查所要。T0 v2 已改 `torch.empty_like(q)` + flatten 逐位对拍。
+
 ```bash
 # 0) 环境自检 + 插件重装（provenance 四查见 README）
 cd /data/flagos_feat_fc/vllm-plugin-FL && pip install --no-deps --no-build-isolation . && pip show vllm-fl | grep -i location
 
-# 1) T0 位精确 + cudagraph 相容（~1min）
-python3 /data/flagos_feat_fc/scripts/fc/t0_direct_out.py            # 期望: T0 PASS
+# 1) T0 位精确 + cudagraph 相容（~1min；v2）
+python3 /data/flagos_feat_fc/scripts/fc/t0_direct_out.py            # 期望: [A] shape=(32,16,128) 3D；[B][C] PASS → T0 PASS
 
-# 2) 逃生门回归（确认 =0 时走旧路径不炸）
-VLLM_FL_FLASH_KVCACHE_DIRECT_OUT=0 python3 /data/flagos_feat_fc/scripts/fc/t0_direct_out.py  # 应仍 PASS（走 wrapper 对照臂天然通过；看日志无 fl.flash-direct-out: off:env）
+# 2) 逃生门回归（=0 时门关闭；serve 侧 decode 分支即回退旧 staging 路径）
+VLLM_FL_FLASH_KVCACHE_DIRECT_OUT=0 python3 -c "import sys; sys.path.insert(0,'/data/flagos_feat_fc/vllm-plugin-FL'); import torch; from vllm_fl.dispatch.backends.vendor.metax.impl.attention import flash_attn as fa; print('gate:', fa._flash_direct_out_active())"
+# 期望输出: gate: False（T0 的 arm_b 直调 helper 不经门，故门回归用本行验证）
 
 # 3) T1 serve quick case（双形状 ≥3 轮中位，≥+0.3% 才立项合入；现役冻结参数，零附加 env）
 #    按仓里现役 T1 快跑协议执行 4096/1024/64/32 与 4096/1024/64/64 两形状；
 #    对照臂 = delivery/s2-final 同协议轮次。
 ```
 
-观察点：serve 日志应出现 `fl.flash-direct-out: on`；若出现 `off:runtime(...)` 说明 MACA
-二进制拒收 out 参（静态取证未命中），补丁自动回退零风险，届时 F-c 转判「结构性不可动
-（等 vendor 透出 out）」并仅留报告。
+观察点：T0 `[A]` 行打出 wrapper 返回形状（预期 3D (32,16,128)，顺带验证 3D-return
+推断）；serve 日志应出现 `fl.flash-direct-out: on`；若出现 `off:runtime(...)` 说明
+C++ 运行期另有未覆盖限制，补丁自动回退零风险，届时 F-c 转判「结构性不可动（等
+vendor 透出 out）」并仅留报告。
 
 ## 4. 其余拷贝判决（非主站，不动）
 
