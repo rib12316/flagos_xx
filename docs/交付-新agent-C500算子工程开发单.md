@@ -6,6 +6,19 @@
 
 ## 0. 必读与红线（违者回滚）
 
+**【统一规矩·算子交付 DoD 五件套】（用户裁定 11-20，对所有 agent/所有机器生效）**
+融合/自研/替换算子，**"kernel 写完并通过 T0" ≠ 交付**。凡判活要用的算子，必须完成真实落地：
+1. **kernel 入库**：搬进 `vllm-plugin-FL/vllm_fl/dispatch/backends/flaggems/impl/`（或对应 vendor impl 目录），
+   不允许只散落在 scripts/ 里（研究性探针与判死档案除外）；文件头注释含：数学口径来源（照抄自哪个现役
+   kernel/哪行）、位精确或分布等价声明、graph 相容设计说明、纪律声明（模板抄 `vendor/iluvatar/attn_splitkv.py` 头注）。
+2. **dispatch 注册**：进算子注册/路由表（`CachedOp(...)` 先例 `w8a8/linear.py:34`），带 env 逃生门。
+3. **调用点接线**：真实执行路径改为调它（见 §3.5 接线设计）；装载期静态决定，禁运行时分支（cudagraph 安全）。
+4. **测试随库走**：T0 对拍脚本进 `scripts/<id>/`；serve 级 T1（双形状 ≥3 轮中位）过 +0.3% 门才有合入资格。
+5. **文档登记**：台账 §9 追加行 + 本文档 §8《算子库登记表》登记（op 名/落点/接线方式/实测/env 门）。
+   交付通报必须写明五件套各自状态；只交 kernel 不接线 = 任务未完成。
+
+
+
 1. 通读顺序：`CLAUDE.md` → `README.md`（纪律红线）→ `docs/二期计划-1120.md`（背景）→
    `docs/00-统一假设台账.md` §9（前人判决，**不要重判已判死项**）→ 本文档。
 2. 红线：serve 启动参数冻结（优化一律走**插件代码默认值**+env 逃生门，①⑤ 翻转先例）；
@@ -51,6 +64,24 @@
 - 直写 **triton kernel 替换**（plugin 的 FlagGems impl 层；数学逐位照抄——舍入口径见
   `_round_half_to_even`，norm/quant 先例在 `dispatch/backends/flaggems/impl/quantization.py`）；
 - 纪律模板抄 `vendor/iluvatar/attn_splitkv.py` 头注（裸 jit/禁 autotune/graph 相容静态查表）。
+
+### 3.5 跨层接线设计（融合算子落地的通用难点，D13 为首例）
+
+难点本质：**norm 在 vLLM 模型层**（`vllm/model_executor/layers/layernorm.py:157`
+`RMSNorm.forward_cuda → ir.ops.fused_add_rms_norm`），**quant 在量化方法层**
+（`vllm_fl/quantization/w8a8/linear.py:118` linear forward 内部 `_dynamic_per_token_quant_int8`）——
+两层互不知晓，中间以 bf16 张量为界。接线方案（**装载期静态配对**，graph 安全）：
+1. 模型构建完成后插件遍历模块图一次，配对固定：`input_layernorm→qkv_proj`、
+   `post_attention_layernorm→gate_up_proj`、`model.norm→lm_head`（norm 输出无其他消费者，融合安全；
+   逐模型核对勿默认）；
+2. 配对到的 norm 模块换融合版（输出 int8+scale，residual 语义照旧），配对 linear 置
+   `expects_prequant=True` 跳过其 quant；
+3. 全部决定在 load 期完成，无运行时分支 → cudagraph 捕获安全；env 门一键回退两步链。
+
+**D13（B 机已交 T0 kernel，位精确+1.10-1.16×）的落地三工序即本节实例**：入库 + 注册 + 按上法接线
+（注意 per-shape 路由：prefill 大 M 档 0.894× 寄存器压力，仅 decode 档启用）——此为 F-d 的前置任务，
+B 机或新 agent 谁先接谁做，完成后按 §8 登记。
+
 门：T0 位精确（norm 类）或分布等价（激活类，概率质量差 <1e-3，参考 `scripts/d5/sample_fast_t0.py` 判据实现）→
 T1 quick case [[4096,1024,64,32]] 与 [[4096,1024,64,64]] 双形状 ≥3 轮中位 ≥+0.3% 才立项合入。
 
@@ -86,3 +117,9 @@ T0（秒-分钟级，位精确/分布等价 + graph 计时）→ T1（quick 双�
 ## 7. 预期总账与纪律
 
 三项合计自主可控预期 **+2-4%**（今日口径）；单 <0.3% 项不合入。诚实负判决同样宝贵——按台账格式记录。
+
+## 8. 算子库登记表（每个落地算子一行，随交付更新；对应 §0 五件套第 5 件）
+
+| op | 状态 | kernel 落点 | 注册/接线 | 实测 | env 门 | 交付方 |
+|---|---|---|---|---|---|---|
+| fused_add_rms_norm_quant（D13） | **kernel T0 完，落地三工序待做**（§3.5 前置） | scripts/d13/（待入库 impl） | 待注册+待静态配对接线 | kernel 1.10-1.16× 位精确；prefill 大 M 0.894× 需 decode-only 路由 | 待加 | B 机 |
