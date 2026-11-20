@@ -40,7 +40,7 @@ for flag in "${flags[@]}"; do
         if ! grep -Eq 'CALL_DONE matched=[1-9]' fa.log; then
             rg -q -a 'torch.ops.vllm.fl_rope_qk_cat.default' "$arm/cache/torch_compile_cache"
         fi
-        rg -q -a 'def _fused_add_rms_norm_quant_int8_bare_kernel\(' "$arm/cache/torch_compile_cache"
+        rg -q -a 'torch\.ops\.vllm_fl\.d13_norm_quant\.default\(' "$arm/cache/torch_compile_cache"
     fi
     timeout 1800 python3 -u "$root/vllm-plugin-FL/benchmarks/benchmark_throughput_serve.py" --model "$model" --served-model-name minicpm --port 9031 --test-cases '[[4096,1024,64,32],[4096,1024,64,64]]' >bench.log 2>&1
     trap - EXIT
