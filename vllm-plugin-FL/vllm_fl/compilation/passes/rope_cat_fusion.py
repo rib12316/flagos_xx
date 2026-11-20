@@ -47,10 +47,14 @@ from __future__ import annotations
 from typing import Any
 
 import torch
+import torch._inductor.pattern_matcher as pm
+from torch import fx
 
+from vllm.compilation.passes.inductor_pass import enable_fake_mode
 from vllm.compilation.passes.vllm_inductor_pass import (
     VllmFusionPatternMatcherPass,
     VllmPatternReplacement,
+    _remove_noop_permutes,
 )
 from vllm.compilation.passes.fusion.matcher_utils import MatcherRotaryEmbedding
 from vllm.config import VllmConfig
@@ -58,6 +62,20 @@ from vllm.logger import init_logger
 from vllm.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
+
+
+def _trace_keep_view(*args, **kwargs) -> fx.GraphModule:
+    """追踪时**不做** view→reshape 归一化（真实 vllm post-grad 图为 aten.view）。
+
+    VllmFusionPatternMatcherPass 的默认 _trace_fn 会调 view_to_reshape 把
+    pattern 的 aten.view 改写成 aten.reshape；而 serve 的 cached aten 图
+    （/tmp/torchinductor_root/fxgraph/...）实证 rope 段仍是 aten.view
+    （`view_9 = aten.view.default(getitem_12, [arg1_1, -1, 128])`）。
+    target 不同即整模式失配，故本变体保留原始 view 形态。
+    """
+    gm = pm.fwd_only(*args, **kwargs)
+    _remove_noop_permutes(gm)
+    return gm
 
 
 def _fl_rope_qk_cat_impl(
@@ -109,7 +127,15 @@ FUSED_OP = torch.ops.vllm.fl_rope_qk_cat.default
 
 
 class FLRopeQKCatPattern(VllmPatternReplacement):
-    """match {split → native rope(q,k) → view} → 替换为 vllm.fl_rope_qk_cat。"""
+    """match {split → native rope(q,k)} → 替换为 vllm.fl_rope_qk_cat。
+
+    输出形态（flat_outputs）必须与**真实图**逐节点同构：
+    - flat=True（生产图实测形态，默认）：rope 的 aten.cat 输出直接是 figure
+      输出 `(cat[T,2048], cat_1[T,256], v_view[T,256 strided])`——下游
+      reshape 在**另一个 piecewise 图**里（splitting op 切开）。首次 0 命中
+      的就是这里：pattern 多要了 cat→view 节点，真实图没有。
+    - flat=False：备用（若某些图 rope 后紧跟 head-view）。
+    """
 
     def __init__(
         self,
@@ -117,6 +143,7 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         num_kv_heads: int,
         head_size: int,
         is_neox: bool,
+        flat_outputs: bool = True,
     ) -> None:
         self.num_q_heads = num_q_heads
         self.num_kv_heads = num_kv_heads
@@ -125,6 +152,7 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         self.k_size = num_kv_heads * head_size
         self.v_size = num_kv_heads * head_size
         self.is_neox = is_neox
+        self.flat_outputs = flat_outputs
         # enabled=False → 追踪 forward_native（aten 分解），与 compile 图同构；
         # 不跟随 RotaryEmbedding.enabled()（本机 _C.rotary_embedding 存在但
         # compile 模式仍走 native，默认态会错配 custom-op 形态的 pattern）。
@@ -152,12 +180,15 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
         num_q_heads, num_kv_heads = self.num_q_heads, self.num_kv_heads
         head_size = self.head_size
+        flat = self.flat_outputs
 
         def pattern(qkv, positions, cos_sin_cache):
-            # v 必须绑定并作为输出（pattern matcher 要求匹配节点的 users 数
-            # 一致：真实图 split 的第三个 getitem 喂 v-view，缺它整模式失配）
+            # v 必须绑定并作为输出（matcher 要求内部节点 users 数与真实图一致：
+            # 真实 split_with_sizes 的第三个 getitem 喂下游 v view，缺它失配）
             q, k, v = qkv.split([q_size, k_size, v_size], dim=-1)
             q, k = rope_matcher(positions, q, k, cos_sin_cache)
+            if flat:
+                return q, k, v
             return (
                 q.view(-1, num_q_heads, head_size),
                 k.view(-1, num_kv_heads, head_size),
@@ -171,6 +202,7 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         num_q_heads, num_kv_heads = self.num_q_heads, self.num_kv_heads
         head_size = self.head_size
         q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
+        flat = self.flat_outputs
 
         def replacement(qkv, positions, cos_sin_cache):
             _, _, v = qkv.split([q_size, k_size, v_size], dim=-1)
@@ -182,6 +214,9 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
                 num_kv_heads,
                 head_size,
             )
+            if flat:
+                # [T,NQ,D] 连续 → view 成 [T,Q_SIZE]，与 pattern 输出同形同 stride
+                return q.view(-1, q_size), k.view(-1, k_size), v
             return q, k, v.view(-1, num_kv_heads, head_size)
 
         return replacement
@@ -208,12 +243,33 @@ class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
                 num_q_heads, num_kv_heads, head_size,
             )
             return
-        # is_neox 两态都注册（Llama 系 True；成本低，防 config 变体）
+        # is_neox 两态 × 输出形态两态 × 追踪归一化两态。
+        # - 追踪归一化两态：_trace_fn 会把 pattern 的 aten.view 改写成
+        #   aten.reshape；真实 vllm 图在 pass 时刻**仍是 aten.view**（从
+        #   /tmp/torchinductor_root 的 cached aten 图实证），故必须同时注册
+        #   保留 view 的变体，否则 target 就不同（aten.view ≠ aten.reshape）。
+        # - 输出形态两态：生产图是 flat（见 FLRopeQKCatPattern docstring）。
         for is_neox in (True, False):
-            self.register(
-                FLRopeQKCatPattern(num_q_heads, num_kv_heads, head_size, is_neox)
-            )
+            for flat in (True, False):
+                self._register_variants(
+                    FLRopeQKCatPattern(
+                        num_q_heads, num_kv_heads, head_size, is_neox,
+                        flat_outputs=flat,
+                    )
+                )
         self.dump_patterns(config, self.pm_pass)
+
+    @enable_fake_mode
+    def _register_variants(self, pr: FLRopeQKCatPattern) -> None:
+        for trace_fn in (self._trace_fn, _trace_keep_view):
+            pm.register_replacement(
+                pr.pattern,
+                pr.replacement,
+                pr.get_inputs(),
+                trace_fn,
+                self.pm_pass,
+            )
+            self._pattern_replacements.append(pr)
 
 
 def make_rope_cat_pass(config: VllmConfig) -> FLRopeCatFusionPass:

@@ -162,6 +162,40 @@ pattern 命中需 mini-trace 直接判定（cat_3/cat_4 是否消失）。
 dict+__getattr__ 逐次读 os.environ（无模块级缓存，VLLM_FL_SCHED_FL 同款
 机制已在 serve 验证）。CPU 干跑：探针/inject/幂等三分支日志全可见。
 
+## 3.8 pattern 0 命中根因（smoke #3 实锤，commit 5）
+
+从 smoke #3 的 inductor aten 图缓存（/tmp/torchinductor_root/fxgraph/al/falvulax…，
+13:51 落盘）逐行提取真实 post-grad 代码，与 pattern 对字段：
+
+```
+split_with_sizes(qkv, [2048,256,256], -1) → getitem_12(q) 13(k) 14(v)
+index = aten.index.Tensor(cos_sin, [positions])      # 与 pattern 一致
+split = aten.split.Tensor(index, 64, -1)             # 一致
+view_9 = aten.view.default(getitem_12, [arg1_1, -1, 128])   # ← aten.view（非 reshape）
+split_1 = aten.split.Tensor(view_9, 64, -1)          # 一致
+mul/sub/add ... cat = aten.cat([sub_44, add_151], -1)       # 一致
+... k 同 ...
+return (cat, cat_1, view_16, view_14, getitem_9)     # ← rope 输出直接出图，无 head-view
+```
+
+**两处失配（均为 pattern 侧写错，不是图不可达）：**
+1. **多要了末尾 view**：真实图 rope 的 `cat[T,2048]`/`cat_1[T,256]` 直接作为
+   piecewise 图输出返回（下游 head-reshape 在**下一个** piecewise 图里，splitting
+   op 切开）；我的 pattern 要求 `cat → view(-1,16,128)` 存在 → 整模式失配。
+2. **view vs reshape**：`VllmFusionPatternMatcherPass._trace_fn` 会把 pattern 的
+   `aten.view` 改写成 `aten.reshape`，而真实图该处仍是 `aten.view.default`
+   （`torch._inductor.pattern_matcher` 的 `ignore_types` 含 `list`，所以 view 的
+   **shape 参数**（含符号维 `arg1_1`）本就忽略——符号维不是问题，target 才是）。
+
+**修复（commit 5）**：① pattern 输出改为 rope 平铺输出 `(q[T,2048], k[T,256],
+v[T,256])`，replacement 把融合 op 的 `[T,NQ,D]` view 回 `[T,Q_SIZE]`（内存同构、
+零拷贝）；② 保留旧「带 view」形态做备用（flat_outputs 开关）；③ 每种形态各注册
+两份追踪变体（`_trace_fn` 的 reshape 归一化 + 自定义 `_trace_keep_view` 保留
+view），共 2(is_neox)×2(flat)×2(追踪) = 8 个 pattern。
+
+CPU 复证（以真实图逐行重建）：REAL_FLAT MATCH_COUNT=1（q[5,2048] k[5,256]
+v[5,256] 连续）；REAL_VIEW MATCH_COUNT=1。
+
 ## 4. CPU 干跑实证（无卡，FakeTensorMode，不触设备）
 
 | 检查 | 结果 |
