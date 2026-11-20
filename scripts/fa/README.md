@@ -196,6 +196,35 @@ view），共 2(is_neox)×2(flat)×2(追踪) = 8 个 pattern。
 CPU 复证（以真实图逐行重建）：REAL_FLAT MATCH_COUNT=1（q[5,2048] k[5,256]
 v[5,256] 连续）；REAL_VIEW MATCH_COUNT=1。
 
+## 3.9 接线状态与负判决条件（15:00 口径）
+
+**已确证**：
+- kernel 交付：T0 上机 **bitwise maxdiff=0（M=32/64，含负位置回卷）+ 1.61×/1.54×**，
+  prefill 1.00× 无回归；e2e 投影 +0.58%。
+- 注入链路：`[vllm_fl.fa] WorkerFL.__init__ reached …` + `injected in worker` 实证；
+  43s 重编译（uuid 变更）说明 pass 进了 compile 配置。
+- pattern 匹配能力：CPU 上按 smoke#3 cached aten 图**逐行重建**的三种图形态
+  （REAL_FLAT / REAL_VIEW / REAL_EXACT）全部 MATCH_COUNT=1。
+- smoke #1-#4 均 0 命中、cat_3/cat_4 原样（44936×/步）。
+
+**未收敛点（唯一）**：真实 serve 图与 CPU 重建图的差异未定位。为此加文件探针
+（commit 6，`/tmp/fa_pass.log`，不经 logger 树）：MODULE_IMPORT / INIT(icc_id) /
+REGISTER×8 / APPLICABLE / CALL(nodes, cat/view/index 计数 + 前 3 个 args) /
+CALL_DONE(matched) / UUID / WORKER_INJECT(pass_id, icc_id)。
+
+**判读与修法**：
+- 无 UUID → pass 未进 PostGradPassManager（backends.py key/实例身份问题）
+- 有 UUID 无 CALL → is_applicable 或 manager 执行序问题
+- 有 CALL+matched=0 → 图形态差异，NODE 行给出真实 args，可当轮定位
+- matched>0 → 接线成功，转 T1
+
+**负判决条件（若 15:05 前未翻盘）**：F-a 以「kernel 有效资产 + 接线未通」归档：
+kernel（位精确、1.54-1.61×、graph 相容）留 `feat/fa-rope-cat-fusion` 分支与
+`flaggems/impl/rope_cat.py` 入库；pass 与注入代码同留档但默认**不启用**
+（env 门 `VLLM_FL_FA_ROPECAT` 已实现，默认值届时改 0 即可零风险回退），
+并在台账 §9 记「compile-pass 通道在 vllm 0.24+MACA 实测未命中，待后续用
+`inductor_passes` 字符串通道或 TORCHINDUCTOR 图 dump 再攻」。
+
 ## 4. CPU 干跑实证（无卡，FakeTensorMode，不触设备）
 
 | 检查 | 结果 |
