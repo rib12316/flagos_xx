@@ -49,3 +49,26 @@ def w8a8_dynamic_per_token_linear_torch(
     if bias is not None:
         y = y + bias
     return y.to(out_dtype if out_dtype is not None else torch.bfloat16)
+
+
+def fused_add_rms_norm_quant_int8_torch(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    epsilon: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Reference two-step torch chain (norm → quant) for the fused D13 op.
+
+    Matches the Triton bare kernel's intermediate-precision semantics:
+    h=(x+residual) lands in bf16, the norm output lands in bf16 before the
+    f32 quant math. Uses the w8a8 reference quantizer for the second step.
+    """
+    h = x + residual                                    # bf16 intermediate
+    hf = h.float()
+    var = hf.pow(2).sum(-1, keepdim=True) / h.shape[1]
+    y = (hf * torch.rsqrt(var + epsilon)).to(torch.bfloat16)
+    from vllm_fl.quantization.w8a8.reference import (
+        dynamic_per_token_quant_int8,
+    )
+    q, scale = dynamic_per_token_quant_int8(y)
+    return q, scale, h

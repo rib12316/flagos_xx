@@ -67,6 +67,17 @@ class FlagGemsBackend(Backend):
 
         return dynamic_per_token_quant_int8_bare(x)
 
+    def fused_add_rms_norm_quant_int8_bare(
+        self,
+        x: torch.Tensor,
+        residual: torch.Tensor,
+        weight: torch.Tensor,
+        epsilon: float,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        from .impl.quantization import fused_add_rms_norm_quant_int8_bare
+
+        return fused_add_rms_norm_quant_int8_bare(x, residual, weight, epsilon)
+
     def w8a8_dynamic_per_token_linear(
         self,
         x_q: torch.Tensor,
