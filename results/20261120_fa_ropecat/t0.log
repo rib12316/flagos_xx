@@ -1,0 +1,81 @@
+INFO 11-20 13:05:25 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-20 13:05:25 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-20 13:05:25 [__init__.py:58] Loading plugin fl
+/opt/conda/lib/python3.12/site-packages/torch/library.py:381: UserWarning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: _C::cutlass_scaled_mm_supports_fp8(int cuda_device_capability) -> bool
+    registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+  dispatch key: CompositeImplicitAutograd
+  previous kernel: registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+       new kernel: registered at /dev/null:95 (Triggered internally at /workspace/framework/mcPytorch/aten/src/ATen/core/dispatch/OperatorEntry.cpp:218.)
+  self.m.impl(
+INFO Print the version information of mcoplib during compilation.
+
+Version info:Mcoplib_Version = '0.4.5'
+Build_Maca_Version = '3.7.0.37'
+GIT_BRANCH = 'HEAD'
+GIT_COMMIT = 'a9125e4'
+Vllm Op Version = 0.20.0
+SGlang Op Version  = 0.5.10 
+
+INFO Staring Check the current MACA version of the operating environment.
+
+INFO: Release major.minor matching,  successful:3.7. 
+
+INFO 11-20 13:05:28 [__init__.py:237] Platform plugin fl is activated
+/opt/conda/lib/python3.12/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/opt/conda/lib/python3.12/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+Failed to import maca patches: cannot import name 'Attention' from partially initialized module 'vllm.model_executor.layers.attention' (most likely due to a circular import) (/opt/conda/lib/python3.12/site-packages/vllm/model_executor/layers/attention/__init__.py)
+Failed to import maca patches: cannot import name 'MMEncoderAttention' from partially initialized module 'vllm.model_executor.layers.attention' (most likely due to a circular import) (/opt/conda/lib/python3.12/site-packages/vllm/model_executor/layers/attention/__init__.py)
+[2026-11-20 13:05:33] [INFO] [vllm_fl.dispatch.backends.vendor.metax.attn_splitkv_hop] fl.attn-splitkv(metax): VLLM_FL_ATTN_SPLITKV=0，保持 MACA flash
+# PROVENANCE t0_rope_cat: git=123b612 torch=2.8.0+metax3.7.0.7
+[corr M=32] q bitwise=True (maxdiff 0) | k bitwise=True (maxdiff 0)
+[corr M=64] q bitwise=True (maxdiff 0) | k bitwise=True (maxdiff 0)
+[corr native-fp32 M=32] q maxdiff=0.0078125 | k maxdiff=0.0078125
+[13:05:35.870][MXC][E]xnack(0x8): kernel causes atu address translation error
+[13:05:35.871][MCR][E]mx_trapProcess.cpp       :128 : trapping pipeID=0,queueID=0!
+[13:05:35.871][MCR][E]mx_trapProcess.cpp       :129 : trapping virtualDevice=0x7f56f4000c70!
+[13:05:35.878][MCR][E]mx_trapProcess.cpp       :1000: Node ID is 2, Wave ID is -2
+[13:05:35.878][MCR][E]mx_trapProcess.cpp       :1023: debug info: 0x66,0x01,0x83,0x10,0x90,0x00,0x00,0x00,0xe0,0x23,0x00,0x00,0x43,0x00,0x00,0x00,
+[13:05:35.878][MCR][E]mx_device.cpp            :10101: trap:precise positioning.
+[13:05:35.878][MCR][E]mx_device.cpp            :10106: trapping: kernelName: _ref_cat3 ,commandIndex: 98 , trapType: Xnack Error/ATU Fault(0x8)
+[13:05:35.878][MCR][E]mx_trapProcess.cpp       :914 : Xnack(0x8) exception happened in the shader, the mcruntime api will be disabled
+[13:05:36.870][MCR][E]mx_signal.cpp            :590 : Failed signal [0x7f5ce6c01240] wait
+[13:05:36.871][MCR][E]mx_signal.cpp            :590 : Failed signal [0x7f5ce6c01240] wait
+[13:05:36.871][MCR][E]mx_command.cpp           :129 : command 0x55af40e21cf0 status invalid! Current status : 0,try to set status : -1
+[13:05:36.872][MCR][E]mc_runtime_api.cpp       :215 : 339613: [7f5e96e9c740] mcGetDevice: Returned mcErrorIllegalAddress
+Traceback (most recent call last):
+  File "/opt/conda/lib/python3.12/site-packages/torch/cuda/__init__.py", line 1159, in synchronize
+    return torch._C._cuda_synchronize()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: an illegal memory access was encountered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data/flagos_feat_fa/scripts/fa/t0_rope_cat.py", line 302, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/flagos_feat_fa/scripts/fa/t0_rope_cat.py", line 282, in main
+    us_ref = bench(fn_ref)
+             ^^^^^^^^^^^^^
+  File "/data/flagos_feat_fa/scripts/fa/t0_rope_cat.py", line 187, in bench
+    torch.cuda.synchronize()
+  File "/opt/conda/lib/python3.12/site-packages/torch/cuda/__init__.py", line 1158, in synchronize
+    with torch.cuda.device(device):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.12/site-packages/torch/cuda/__init__.py", line 545, in __exit__
+    self.idx = torch.cuda._maybe_exchange_device(self.prev_idx)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: an illegal memory access was encountered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+[13:06:09.840][MCR][E]mx_signal.cpp            :160 : shouldn't destroy a profiling signal 0x7f56f40058e0 that is still busy!
