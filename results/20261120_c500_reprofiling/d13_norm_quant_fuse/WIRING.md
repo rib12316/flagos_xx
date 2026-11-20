@@ -78,3 +78,11 @@
   e2e 收益在当前 bench 协议下不可分辨**。归档留档，A 机裁定是否保留基础设施
   （默认关合入 or 纯留档）；lm_head 联动 gather、m_fuse_max 扩档等后续假设
   价值相应调低。
+
+### 原始证据归档说明
+
+- `t1_raw/bench_*.log`：4 会话 bench 全输出（含每轮 Request/Output throughput）
+- `t1_raw/serve_key_lines.txt`：各会话 serve 日志关键行抽取（paired 83 行有无 =
+  A/B 有效性证据、capture 行数、dynamo 错误计数）
+- 逐轮 CSV（bench 脚本原生输出）：`benchmark_results/{raw_runs,summary}_2026112
+  0_13*.csv`（随 18215f2 入库）

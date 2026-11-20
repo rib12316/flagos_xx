@@ -1,0 +1,16 @@
+=== 409610246432_base ===
+(无配对行=base臂/env门生效)
+capture-lines: 2
+dynamo-errors: 0
+=== 409610246432_fused ===
+(EngineCore pid=141978) INFO 11-20 13:34:40 [d13_norm_quant.py:225] D13 fused_add_rms_norm+quant: paired 83 sites (m_fuse_max=512, buf_rows=2048)
+capture-lines: 2
+dynamo-errors: 0
+=== 409610246464_base ===
+(无配对行=base臂/env门生效)
+capture-lines: 2
+dynamo-errors: 0
+=== 409610246464_fused ===
+(EngineCore pid=148673) INFO 11-20 13:50:37 [d13_norm_quant.py:225] D13 fused_add_rms_norm+quant: paired 83 sites (m_fuse_max=512, buf_rows=2048)
+capture-lines: 2
+dynamo-errors: 0
