@@ -55,3 +55,26 @@
 - GPU 独占声明：单测/对拍/烟测期间 mx-smi 空闲、无并发测量
 - serve 命令：`VLLM_PLUGINS=fl vllm serve /workspace/MiniCPM5-2B-w8a8-v2 --port 9031 --served-model-name minicpm --gpu-memory-utilization 0.85 --max-model-len 131072`（frozen，A/B 仅 env 翻转）
 - 待补：T1 quick 双形状 [[4096,1024,64,32]]/[[4096,1024,64,64]] ≥3 轮中位 ≥+0.3%（B3）
+
+## T1 quick A/B 结果（2026-11-20 13:3x-14:0x，双形状 4 会话新鲜 serve）
+
+| case | fused 热三轮 | base 热三轮 | fused 中位 | base 中位 | Δ | 门 |
+|---|---|---|---|---|---|---|
+| [[4096,1024,64,32]] | 1195.60/1206.07/1205.16 | 1206.38/1208.50/1208.39 | 1205.16 | 1208.39 | **-0.267%** | FAIL |
+| [[4096,1024,64,64]] | 1422.70/1421.72/1410.06 | 1422.68/1422.46/1423.37 | 1421.72 | 1422.68 | **-0.067%** | FAIL |
+
+判据 = Output token throughput ≥3 热轮中位 ≥+0.3%。**两形状均未过门（噪声带内
+微负）→ 按 §7「单 <0.3% 项不合入」，不合入 delivery**。fused 臂 serve 日志均
+含 `paired 83 sites`、base 臂均无（env 门生效，A/B 有效）。
+
+### 归因（诚实记录）
+
+- kernel 级收益真实：bitwise + graph 口径 1.15×（T0 接线版）。但 e2e 预估
+  本就只有 +0.4-0.6%（83 站 × ~2-6µs / ITL 26ms），而本 quick 协议轮间散布
+  ±0.5-0.9%（fused 轮内 1195.6→1206.1 = 0.9%）——效应量 ≤ 噪声分辨率。
+- 稀释因素：chunked prefill 使大部分步为 mixed 批（M 达 2048 > m_fuse_max
+  → 走两步链），仅纯 decode 步吃到融合；且 case 墙钟 prefill 占比高。
+- 结论：**kernel 与接线工程均成立（bitwise/graph 安全/83 站/两级回退门），
+  e2e 收益在当前 bench 协议下不可分辨**。归档留档，A 机裁定是否保留基础设施
+  （默认关合入 or 纯留档）；lm_head 联动 gather、m_fuse_max 扩档等后续假设
+  价值相应调低。
