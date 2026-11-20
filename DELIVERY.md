@@ -122,3 +122,18 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
 - 产物：results/20261119_d4_metax_port/{final,baseline,PROVENANCE,splitkv_iluvatar_prompt.md}
 - 注意：本机 bench 客户端有"数据落盘后汇总阶段挂死"现象——raw_runs CSV 数据完整有效，
   汇总从 CSV 提取（已按此口径出全部数字）
+
+## 交付包（2026-11-20 23:20）
+
+- 产物：`/data/delivery_final/infragogogo.zip`（24 MB；解包根目录 `infragogogo/`）。
+- 结构：`FlagGems/`（v5.3.5 原样，内容级核对 0 差异）、`vllm-plugin-FL/`（= 本分支
+  afa5fda 全量源码，432 文件逐一哈希一致）、`scripts/`（量化/复跑/探针工具）、
+  `evidence/`（11-20 官方 CSV、105 题判分、基线/上版对照、融合 A/B、act_stats）、
+  `readme.md`（复现说明）、`report.pdf`（23 页技术报告，新编号 C1/M1–M6/V1–V8，
+  两卡独立成章，天数终版数字留空待补测）。
+- 校验：pip 从包内安装成功；`vllm_fl` 全树 py_compile 通过；插件树与仓库哈希一致；
+  report.pdf 文本可检索（数字/模型名抽取正确）。
+- ⚠ 环境事件：23:15 起宿主侧回收全部 4 张 C500（`mx-smi -L` 四卡
+  `Not Available(MetaX Sysfs File Unaccessible)`，`torch.cuda.is_available()=False`），
+  非本机操作所致（20:50 官方复测后 GPU 未再使用）。今日数字已落盘不受影响；
+  天数终版补测需待 GPU 恢复。
