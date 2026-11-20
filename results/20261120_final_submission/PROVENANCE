@@ -1,0 +1,30 @@
+== PROVENANCE 2026-11-20 19:45:39 ==
+git: 83ddda7a18f6145f14abcf2e27442ec5225aae46 (83ddda7)
+git status dirty files: 2
+plugin: Version: 0.0.0 Location: /opt/conda/lib/python3.12/site-packages 
+INFO 11-20 19:45:42 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-20 19:45:42 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-20 19:45:42 [__init__.py:49] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+INFO Print the version information of mcoplib during compilation.
+
+Version info:Mcoplib_Version = '0.4.5'
+Build_Maca_Version = '3.7.0.37'
+GIT_BRANCH = 'HEAD'
+GIT_COMMIT = 'a9125e4'
+Vllm Op Version = 0.20.0
+SGlang Op Version  = 0.5.10 
+
+INFO Staring Check the current MACA version of the operating environment.
+
+INFO: Release major.minor matching,  successful:3.7. 
+
+INFO 11-20 19:46:09 [__init__.py:237] Platform plugin fl is activated
+vllm: 0.24.0
+
+Attached GPUs                                     : 1
++---------------------------------------------------------------------------------+
+| MX-SMI 2.3.1                       Kernel Mode Driver Version: 3.8.30           |
+| MACA Version: 3.7.0.38             BIOS Version: 1.33.5.0                       |
+|------------------+-----------------+---------------------+----------------------|
+| Board       Name | GPU   Persist-M | Bus-id              | GPU-Util      sGPU-M |
+| Pwr:Usage/Cap    | Temp       Perf | Memory-Usage        | GPU-State            |
