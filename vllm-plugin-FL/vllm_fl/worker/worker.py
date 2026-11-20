@@ -213,30 +213,96 @@ class WorkerFL(WorkerBase):
         #      解析（早于插件变异，塞了也不解析，死路）；
         #   ③ WorkerFL.__init__ 在 EngineCore 子进程内执行、且先于
         #      load_model（编译在此触发）——此处注入的实例永不跨进程。
-        # 静态决定、无运行时分支（cudagraph 安全）；pattern 0 命中时静默
-        # 退回现状两核。env 门：VLLM_FL_FA_ROPECAT=0 完全不注入。
+        # env 门：VLLM_FL_FA_ROPECAT=0 完全不注入（envs 为 dict+__getattr__
+        # 逐次读 os.environ，无模块级缓存，与 VLLM_FL_SCHED_FL 同款机制）。
+        #
+        # smoke #2 判决（CPU 干跑复现同症状）：**本模块的 vllm logger 不打
+        # INFO**——worker.py 用 vllm.logger.init_logger（handler 只挂在 "vllm"
+        # 树），"vllm_fl.worker.worker" 传播到无 handler 的 root → INFO 静默
+        # 丢弃（logging.lastResort 只出 WARNING+）。即 smoke #2 的"零痕迹"
+        # 未必是没执行——很可能已注入成功只是日志被吞。故本块改用
+        # vllm_fl.dispatch.logger_manager.get_logger（自挂 StreamHandler，
+        # propagate=False，serve 实证可见），且所有路径全部落日志。
+        import vllm_fl as _vfl
+        from vllm_fl.dispatch.logger_manager import get_logger as _fa_get_logger
+
+        _fa_log = _fa_get_logger("vllm_fl.fa")
+
         try:
             from vllm_fl import envs as fl_envs
+            from vllm_fl.compilation.passes.rope_cat_fusion import (
+                FLRopeCatFusionPass,
+                make_rope_cat_pass,
+            )
 
             _cc = vllm_config.compilation_config
-            if (
-                fl_envs.VLLM_FL_FA_ROPECAT
-                and "post_grad_custom_post_pass" not in _cc.inductor_compile_config
-            ):
-                from vllm_fl.compilation.passes.rope_cat_fusion import (
-                    make_rope_cat_pass,
-                )
+            _key = "post_grad_custom_post_pass"
+            _existing = _cc.inductor_compile_config.get(_key)
+            _fa_log.info(
+                "WorkerFL.__init__ reached: file=%s vllm_fl_pkg=%s "
+                "ROPECAT=%s cc_has_key=%s existing=%r",
+                __file__,
+                getattr(_vfl, "__file__", None),
+                fl_envs.VLLM_FL_FA_ROPECAT,
+                _existing is not None,
+                type(_existing).__name__ if _existing is not None else None,
+            )
+            if not fl_envs.VLLM_FL_FA_ROPECAT:
+                _fa_log.info("F-a rope+cat: env gate off, skip injection")
+            elif isinstance(_existing, FLRopeCatFusionPass):
+                _fa_log.info("F-a rope+cat: already injected, skip (idempotent)")
+            elif _existing is not None:
+                # 可组合：已有别人家的 pass → 组合 wrapper（F-a 先跑、再
+                # delegate 原 pass），uuid 拼接两者；backends.py 只认
+                # InductorPass 实例，组合类继承之。
+                from vllm.compilation.passes.inductor_pass import InductorPass
 
+                if isinstance(_existing, InductorPass):
+                    with set_current_vllm_config(vllm_config, check_compile=False):
+                        _mine = make_rope_cat_pass(vllm_config)
+
+                    class _FLCompositePass(InductorPass):
+                        def __init__(self, first, rest):
+                            self.first = first
+                            self.rest = rest
+
+                        def __call__(self, graph):
+                            self.first(graph)
+                            self.rest(graph)
+
+                        def is_applicable_for_range(self, compile_range):
+                            return self.first.is_applicable_for_range(
+                                compile_range
+                            ) and self.rest.is_applicable_for_range(compile_range)
+
+                        def uuid(self):
+                            return InductorPass.hash_dict(
+                                {"fa": self.first.uuid(), "rest": self.rest.uuid()}
+                            )
+
+                    _cc.inductor_compile_config[_key] = _FLCompositePass(
+                        _mine, _existing
+                    )
+                    _fa_log.info(
+                        "F-a rope+cat fusion pass injected (composite with %r)",
+                        type(_existing).__name__,
+                    )
+                else:
+                    _fa_log.warning(
+                        "F-a rope+cat: key occupied by non-InductorPass %r, skip",
+                        type(_existing).__name__,
+                    )
+            else:
                 with set_current_vllm_config(vllm_config, check_compile=False):
                     _cc.inductor_compile_config[
-                        "post_grad_custom_post_pass"
+                        _key
                     ] = make_rope_cat_pass(vllm_config)
-                logger.info(
+                _fa_log.info(
                     "F-a rope+cat fusion pass injected in worker "
                     "(VLLM_FL_FA_ROPECAT=0 to disable)"
                 )
         except Exception:
-            logger.exception("F-a rope+cat fusion pass 注入失败，退回默认路径")
+            _fa_log.exception("F-a rope+cat fusion pass 注入失败，退回默认路径")
 
         if (
             vllm_config.num_speculative_tokens == 1

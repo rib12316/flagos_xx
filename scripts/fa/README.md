@@ -94,7 +94,7 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
 - 计时铁律：L2-warm（同输入反复跑，elementwise 不破坏输入）+ CUDA graph replay
   中位（抄 d9_quant_probe_metax.py 的 bench()）。
 - 上机顺序：T0 过门槛（bitwise + ≥1.15×）→ smoke serve（log 确认
-  `F-a rope+cat fusion pass injected in worker` + pattern 命中数 + decode 步 trace 里
+  `[vllm_fl.fa]` 探针/injected 行 + pattern 命中数 + decode 步 trace 里
   cat_3/cat_4 消失、fl_rope_qk_cat 出现 ~42 次/步）→ T1 quick 双形状三轮中位
   ≥+0.3% 才立项合入。
 
@@ -144,6 +144,24 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
   TypeError；pickle 往返后的 config 上执行 worker 注入 → 2 patterns OK +
   deepcopy OK。
 
+## 3.7 smoke #2「零痕迹」判决：worker.py 的 vllm logger 吞 INFO（commit 4）
+
+CPU 干跑**复现同症状**：worker.py 用 `vllm.logger.init_logger`，handler 只挂
+在 "vllm" logger 树上；`vllm_fl.worker.worker` 域名不在树下 → 传播到无
+handler 的 root → INFO 静默丢弃（logging.lastResort 只出 WARNING+）。而
+`vllm_fl.dispatch.*` 用自带 `logger_manager.get_logger`（自挂 StreamHandler、
+propagate=False）所以 serve 可见——这就是「dispatch 三行在、注入零痕迹」的
+机制解释。**推论：smoke #2 的注入很可能已执行成功，只是日志被吞**——是否
+pattern 命中需 mini-trace 直接判定（cat_3/cat_4 是否消失）。
+
+修复（commit 4）：注入块改用 `get_logger("vllm_fl.fa")`（serve 实证可见通道，
+级别由 VLLM_FL_LOG_LEVEL 控、默认 INFO）；①首行无条件探针（try 外）打印
+`__file__`/`vllm_fl` 包路径/ROPECAT/key 状态——一轮分辨「没调/守卫短路/
+装错拷贝」；②守卫改可组合：key 已被别家 InductorPass 占用时用组合 wrapper
+（F-a 先跑、delegate 原 pass、uuid 拼接），仅自身实例才幂等跳过；③envs 为
+dict+__getattr__ 逐次读 os.environ（无模块级缓存，VLLM_FL_SCHED_FL 同款
+机制已在 serve 验证）。CPU 干跑：探针/inject/幂等三分支日志全可见。
+
 ## 4. CPU 干跑实证（无卡，FakeTensorMode，不触设备）
 
 | 检查 | 结果 |
@@ -177,7 +195,7 @@ python3 scripts/fa/t0_rope_cat.py 2>&1 | tee results/20261120_fa_ropecat/t0.log
 VLLM_FL_FA_ROPECAT=1 python3 -m vllm.entrypoints.openai.api_server \
   --model /workspace/MiniCPM5-2B-w8a8-v2 --... (serve 参数照抄 d5 冻结集) \
   2>&1 | tee /tmp/smoke_fa.log
-#    看点：`F-a rope+cat fusion pass injected in worker`（WorkerFL 日志）、`Replaced N patterns`（期望 ~42/图）、
+#    看点：`[vllm_fl.fa] WorkerFL.__init__ reached` 探针行 + `injected in worker`、`Replaced N patterns`（期望 ~42/图）、
 #    decode trace 中 triton_poi_fused_cat_3/4 消失、fl_rope_qk_cat 出现
 # 3b) 回退臂（A/B）
 VLLM_FL_FA_ROPECAT=0 python3 -m vllm.entrypoints.openai.api_server ...（同上）
