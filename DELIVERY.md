@@ -6,7 +6,8 @@
 |---|---|---:|---:|---:|
 | 沐曦 C500（本分支 11-20 官方复测） | W8A8 + mctlassEx + 四项融合（F-a/D13/A-H4/F-c 默认 metax 开） | **5986.27** | **7662.39** | **97.14%** |
 | 沐曦 C500（11-19 上版，无融合） | W8A8 线性层和 lm_head、mctlassEx INT8 矩阵乘及零拷贝权重布局 | 6399.21 | 7509.87 | 98.1% |
-| 天数 BI-V150 | attention 启动参数、TD 和 TILE、调度 watermark、W8A8 及采样过滤 | 3414.58 | 1570.62 | 97.14% |
+| 天数 BI-V150（11-20 官方终版，含 V2/V3） | launch 表、TD/TILE、watermark、W8A8（TN+ixformer）、采样过滤、BLOCK_M 重标定 | **4614.33** | **3259.02** | **96.19%** |
+| 天数 BI-V150（11-18 上版，无 V2/V3） | attention 启动参数、TD 和 TILE、调度 watermark、W8A8 及采样过滤 | 3414.58 | 1570.62 | 97.14% |
 
 官方测量记录见 [C500 汇总](results/20261119_d4_metax_port/final/SUMMARY.md) 和 [V150 逐轮结果与精度](results/d3_official_1116_2222/)。
 
@@ -137,3 +138,12 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
   `Not Available(MetaX Sysfs File Unaccessible)`，`torch.cuda.is_available()=False`），
   非本机操作所致（20:50 官方复测后 GPU 未再使用）。今日数字已落盘不受影响；
   天数终版补测需待 GPU 恢复。
+
+
+## 天数终版官方复测（2026-11-20 23:07，树 afa5fda）
+
+- 4K **4614.33**（vs 上版 3414.58 = **+35.1%**；vs 纯净基线 1879.68 = **+145.5%**）
+- 16K **3259.02**（vs 上版 1570.62 = **+107.5%**；vs 基线 862.06 = **+278%**）
+- 105 题 **0.9619**（红线 0.95 过；历史带 0.962–0.971 内）
+- TTFT：4K Median 1628 ms（基线 −87%）；16K Mean 151.0 s（基线 −76%）
+- 产物：results/20261120_v150_final_tn/；交付包与报告已按此更新（infragogogo.zip 重建）
