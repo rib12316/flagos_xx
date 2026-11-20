@@ -297,6 +297,14 @@ class WorkerFL(WorkerBase):
                     _cc.inductor_compile_config[
                         _key
                     ] = make_rope_cat_pass(vllm_config)
+                from vllm_fl.compilation.passes.rope_cat_fusion import (
+                    _probe as _fa_probe,
+                )
+
+                _fa_probe(
+                    f"WORKER_INJECT icc_id={id(_cc.inductor_compile_config)} "
+                    f"pass_id={id(_cc.inductor_compile_config[_key])}"
+                )
                 _fa_log.info(
                     "F-a rope+cat fusion pass injected in worker "
                     "(VLLM_FL_FA_ROPECAT=0 to disable)"

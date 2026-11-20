@@ -64,6 +64,29 @@ from vllm.utils.torch_utils import direct_register_custom_op
 logger = init_logger(__name__)
 
 
+def _probe(msg: str) -> None:
+    """文件探针：直接 append 到 /tmp/fa_pass.log（不经任何 logger 树）。
+
+    背景：vllm_fl.worker.worker 的 vllm logger 在 EngineCore 进程吞 INFO，
+    smoke #2/#3/#4 的「零痕迹」无法区分「没调用」与「调用了不匹配」。
+    路径可被 VLLM_FL_FA_PROBE 覆盖；任何异常静默（探针绝不打断编译）。
+    """
+    import os
+    import time
+
+    try:
+        path = os.environ.get("VLLM_FL_FA_PROBE", "/tmp/fa_pass.log")
+        with open(path, "a") as f:
+            f.write(
+                f"[{time.strftime('%H:%M:%S')} pid={os.getpid()}] {msg}\n"
+            )
+    except Exception:
+        pass
+
+
+_probe("MODULE_IMPORT rope_cat_fusion")
+
+
 def _trace_keep_view(*args, **kwargs) -> fx.GraphModule:
     """追踪时**不做** view→reshape 归一化（真实 vllm post-grad 图为 aten.view）。
 
@@ -227,6 +250,11 @@ class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
 
     def __init__(self, config: VllmConfig) -> None:
         super().__init__(config, "fl_rope_cat_fusion_pass")
+        _probe(
+            f"INIT pass_id={id(self)} "
+            f"icc_id={id(config.compilation_config.inductor_compile_config)} "
+            f"key_present={'post_grad_custom_post_pass' in config.compilation_config.inductor_compile_config}"
+        )
         hf_config: Any = (
             config.model_config.hf_config if config.model_config else None
         )
@@ -270,6 +298,51 @@ class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
                 self.pm_pass,
             )
             self._pattern_replacements.append(pr)
+        _probe(
+            f"REGISTER neox={pr.is_neox} flat={pr.flat_outputs} "
+            f"total={len(self._pattern_replacements)}"
+        )
+
+    def is_applicable_for_range(self, compile_range) -> bool:
+        ok = super().is_applicable_for_range(compile_range)
+        _probe(f"APPLICABLE range={compile_range} -> {ok}")
+        return ok
+
+    def uuid(self) -> str:
+        u = super().uuid()
+        _probe(f"UUID {u}")
+        return u
+
+    def __call__(self, graph) -> None:
+        """文件探针（不经 logger 树——worker.py 的 vllm logger 会吞 INFO）：
+        分辨「pass 没被调用」vs「被调用但图形态不匹配」。"""
+        try:
+            nodes = list(graph.nodes)
+            cats = [n for n in nodes if "cat" in str(getattr(n, "target", ""))]
+            views = [
+                n for n in nodes
+                if "view" in str(getattr(n, "target", ""))
+                or "reshape" in str(getattr(n, "target", ""))
+            ]
+            idxs = [n for n in nodes if "index" in str(getattr(n, "target", ""))]
+            _probe(
+                f"CALL pass_id={id(self)} nodes={len(nodes)} "
+                f"cat={len(cats)} view_reshape={len(views)} index={len(idxs)}"
+            )
+            for n in (cats[:3] + views[:3] + idxs[:3]):
+                _probe(f"  NODE {n.target} args={repr(n.args)[:200]}")
+        except Exception:
+            import traceback
+
+            _probe(f"CALL_PROBE_ERR {traceback.format_exc()[:1500]}")
+        try:
+            super().__call__(graph)
+        except Exception:
+            import traceback
+
+            _probe(f"CALL_EXCEPTION {traceback.format_exc()[:2000]}")
+            raise
+        _probe(f"CALL_DONE matched={self.matched_count}")
 
 
 def make_rope_cat_pass(config: VllmConfig) -> FLRopeCatFusionPass:
