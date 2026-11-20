@@ -9,7 +9,7 @@ cd /data/flagos_xx
 RES=results/20261120_c500_reprofiling/t1_sample_fast
 mkdir -p "$RES"
 MODEL=/workspace/MiniCPM5-2B-w8a8-v2
-CASE='[[4096,1024,64,32]]'
+CASE='[[4096,1024,64,64]]'
 
 start_serve() {  # $1=tag $2=extra_env
   local tag=$1 extra=$2
