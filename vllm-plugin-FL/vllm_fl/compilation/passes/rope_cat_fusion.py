@@ -87,6 +87,53 @@ def _probe(msg: str) -> None:
 _probe("MODULE_IMPORT rope_cat_fusion")
 
 
+def _install_backend_sync() -> None:
+    """诊断+自愈：保证注入的 pass 在 compile 期真的进 PostGradPassManager。
+
+    serve 探针实证（14:45）: pass 注入成功（WORKER_INJECT icc_id/pass_id 与
+    INIT 一致）但**零 UUID/零 CALL** ⇒ configure_post_pass 时没被 add。
+    backends.py: `self.inductor_config = deepcopy(
+    self.compilation_config.inductor_compile_config)` 是**构造期快照**；
+    若 VllmBackend 构造早于我们的注入，快照里就没有 key，configure_post_pass
+    的 `if self.pass_key in self.inductor_config` 直接跳过。
+
+    本函数包裹 configure_post_pass：打点三处身份，并在快照缺 key、live
+    dict 有 key 时把实例补进快照（自愈），然后照常走 vllm 原逻辑。
+    """
+    try:
+        from vllm.compilation.backends import VllmBackend
+    except Exception:
+        _probe("BACKEND_PATCH_SKIP import_fail")
+        return
+    if getattr(VllmBackend, "_fa_sync_installed", False):
+        return
+    VllmBackend._fa_sync_installed = True
+
+    _orig_configure = VllmBackend.configure_post_pass
+
+    def _fa_configure_post_pass(self) -> None:
+        try:
+            key = "post_grad_custom_post_pass"
+            live = self.compilation_config.inductor_compile_config
+            _probe(
+                f"CONFIGURE_POST_PASS pass_key={self.pass_key} "
+                f"in_snapshot={key in self.inductor_config} "
+                f"in_live={key in live} "
+                f"live_id={id(live)} snapshot_id={id(self.inductor_config)}"
+            )
+            if key == self.pass_key and key not in self.inductor_config and key in live:
+                self.inductor_config[key] = live[key]
+                _probe("CONFIGURE_SELFHEAL copied live pass into snapshot")
+        except Exception:
+            import traceback
+
+            _probe(f"CONFIGURE_PROBE_ERR {traceback.format_exc()[:800]}")
+        return _orig_configure(self)
+
+    VllmBackend.configure_post_pass = _fa_configure_post_pass
+    _probe("BACKEND_PATCH_INSTALLED")
+
+
 def _trace_keep_view(*args, **kwargs) -> fx.GraphModule:
     """追踪时**不做** view→reshape 归一化（真实 vllm post-grad 图为 aten.view）。
 
