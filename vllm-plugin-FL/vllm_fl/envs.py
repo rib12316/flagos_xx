@@ -28,6 +28,12 @@ fl_vllm_environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # 准入 watermark 覆盖（H7/H1：消灭容量钉死期的周期性抢占）
     "VLLM_FL_WATERMARK": lambda: os.environ.get("VLLM_FL_WATERMARK", ""),
+    # F-c: decode flash attention 直写 out（消除 attention 输出 staging copy；
+    # trace 实测 _copy_kernel 42 次/步 ≈ 0.14ms/步）；默认开，=0 回退旧路径
+    "VLLM_FL_FLASH_KVCACHE_DIRECT_OUT": lambda: os.environ.get(
+        "VLLM_FL_FLASH_KVCACHE_DIRECT_OUT", "1"
+    ).lower()
+    not in ("0", "false", "off"),
 }
 
 

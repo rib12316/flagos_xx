@@ -69,6 +69,91 @@ from .mla.common import QueryLenSupport
 
 logger = init_logger(__name__)
 
+# --------------------------------------------------------------
+# F-c: flash decode 直写 out（消除 attention 输出 staging copy）
+# 数学口径：不改任何 kernel/数值——同一组 flash kernel（splitkv/combine）
+# 只是最终写出到 caller 提供的 output 缓冲，替代「flash 内部 new out →
+# output[:n] = view(...) 逐元素拷贝」。位精确 by construction。
+# 证据链：serve trace 中 _copy_kernel 42 次/步（每层 1 次，[bs,2048] bf16，
+# 前驱=flash_fwd_splitkv_combine，后继=o_proj quant）；上游
+# flash_attn.flash_attn_interface.flash_attn_with_kvcache 对
+# flash_attn_2_cuda.fwd_kvcache 的第 13 参恒传 None——该参即 out
+# （.so 内 TORCH_CHECK: "out must have shape (batch_size, seqlen_q,
+# num_heads, head_size_og)" / "out must be on CUDA" / 同 dtype）。
+# graph 相容：分支条件=env + 装载期符号探测 + 进程内一次性失败记录，
+# 均在 cudagraph 捕获前定型，无运行时数据依赖。
+# 纪律：env 逃生门 VLLM_FL_FLASH_KVCACHE_DIRECT_OUT=0 回退 staging copy。
+# --------------------------------------------------------------
+_FLASH_DIRECT_OUT_STATE: str | None = None  # None=未探测 "on" "off:<原因>"
+
+
+def _flash_direct_out_active() -> bool:
+    """进程内静态判定（capture 前定型，无运行时分支）。"""
+    global _FLASH_DIRECT_OUT_STATE
+    if _FLASH_DIRECT_OUT_STATE is None:
+        from vllm_fl.envs import VLLM_FL_FLASH_KVCACHE_DIRECT_OUT
+
+        if not VLLM_FL_FLASH_KVCACHE_DIRECT_OUT:
+            _FLASH_DIRECT_OUT_STATE = "off:env"
+        else:
+            try:
+                import flash_attn_2_cuda  # noqa: F401
+
+                _FLASH_DIRECT_OUT_STATE = "on"
+            except Exception as e:  # pragma: no cover - 非 maca 栈
+                _FLASH_DIRECT_OUT_STATE = f"off:import({e})"
+        logger.info_once(
+            "fl.flash-direct-out: %s", _FLASH_DIRECT_OUT_STATE
+        )
+    return _FLASH_DIRECT_OUT_STATE == "on"
+
+
+def _flash_kvcache_direct_out(
+    q,
+    k_cache,
+    v_cache,
+    block_table,
+    cache_seqlens,
+    softmax_scale,
+    window_size,
+    softcap,
+    s_aux,
+    out,
+):
+    """flash_attn_2_cuda.fwd_kvcache 的直写 out 变体。
+
+    参数序照抄 flash_attn/flash_attn_interface.py::flash_attn_with_kvcache
+    的调用（k/v/rotary/batch_idx/leftpad/alibi 全 None，与插件现有调用点
+    一致）；唯一差异=第 13 参传 out 而非 None。预处理同 wrapper：
+    stride(-1)!=1 才 contiguous。
+    """
+    import flash_attn_2_cuda as _fa2
+
+    mc = lambda t: t.contiguous() if t is not None and t.stride(-1) != 1 else t
+    _fa2.fwd_kvcache(
+        mc(q),
+        k_cache,
+        v_cache,
+        None,  # k
+        None,  # v
+        mc(cache_seqlens),
+        None,  # rotary_cos
+        None,  # rotary_sin
+        None,  # cache_batch_idx
+        None,  # cache_leftpad
+        mc(block_table),
+        None,  # alibi_slopes
+        mc(out),  # out：预分配输出（F-c）
+        float(softmax_scale),
+        True,  # causal（与调用点一致）
+        int(window_size[0]),
+        int(window_size[1]),
+        float(softcap),
+        True,  # rotary_interleaved（wrapper 默认值）
+        0,  # num_splits：自动（wrapper 默认值）
+        s_aux,
+    )
+
 
 @register_backend(AttentionBackendEnum.FLASH_ATTN)
 class MacaFlashAttentionBackend(AttentionBackend):
@@ -827,22 +912,59 @@ class FlashAttentionImpl(AttentionImpl):
                     decode_query = reshape_query_for_spec_decode(
                         decode_query, attn_metadata.num_decodes
                     )
-                    output_unreshape = flash_attn_with_kvcache(
-                        q=decode_query,
-                        k_cache=key_cache,
-                        v_cache=value_cache,
-                        block_table=attn_metadata.decode_block_table,
-                        cache_seqlens=attn_metadata.decode_seq_lens,
-                        softmax_scale=self.scale,
-                        causal=True,
-                        window_size=self.sliding_window,
-                        alibi_slopes=self.alibi_slopes,
-                        softcap=self.logits_soft_cap,
-                        s_aux=self.sinks,
-                    )
-                    output[:num_decode_tokens] = reshape_attn_output_for_spec_decode(
-                        output_unreshape
-                    )
+                    # F-c: 优先直写 output（免 staging copy，位精确，
+                    # 见模块头注）；失败时进程内永久回退旧路径。
+                    direct_done = False
+                    if (
+                        _flash_direct_out_active()
+                        and output.dtype == decode_query.dtype
+                        and output.is_contiguous()
+                        and decode_query.shape[-1] == output.shape[-1]
+                        and decode_query.shape[-2] == output.shape[-2]
+                    ):
+                        try:
+                            _flash_kvcache_direct_out(
+                                decode_query,
+                                key_cache,
+                                value_cache,
+                                attn_metadata.decode_block_table,
+                                attn_metadata.decode_seq_lens,
+                                self.scale,
+                                self.sliding_window,
+                                self.logits_soft_cap,
+                                self.sinks,
+                                output[:num_decode_tokens].view(
+                                    *decode_query.shape
+                                ),
+                            )
+                            direct_done = True
+                        except Exception as e:
+                            global _FLASH_DIRECT_OUT_STATE
+                            _FLASH_DIRECT_OUT_STATE = f"off:runtime({e})"
+                            logger.warning(
+                                "fl.flash-direct-out: 直写失败，本进程永久"
+                                "回退 staging copy: %s",
+                                e,
+                            )
+                    if not direct_done:
+                        output_unreshape = flash_attn_with_kvcache(
+                            q=decode_query,
+                            k_cache=key_cache,
+                            v_cache=value_cache,
+                            block_table=attn_metadata.decode_block_table,
+                            cache_seqlens=attn_metadata.decode_seq_lens,
+                            softmax_scale=self.scale,
+                            causal=True,
+                            window_size=self.sliding_window,
+                            alibi_slopes=self.alibi_slopes,
+                            softcap=self.logits_soft_cap,
+                            s_aux=self.sinks,
+                        )
+                        output[:num_decode_tokens] = (
+                            reshape_attn_output_for_spec_decode(
+                                output_unreshape
+                            )
+                        )
                 return output
             # └------------------------- Metax Modification -------------------------┘
 
