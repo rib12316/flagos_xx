@@ -87,16 +87,19 @@ def run():
         for M in MS:
             torch.manual_seed(0)
             a = torch.randint(-127, 128, (M, K), device=DEV, dtype=torch.int8)
-            b = torch.randint(-127, 128, (K, N), device=DEV, dtype=torch.int8)
+            # TN 布局（生产默认）：权重 [N,K] 直存；融合 kernel 走 stride 加载，
+            # 链基线走 .t() 视图（probe2 已证视图与连续位精确同速）。
+            bt = torch.randint(-127, 128, (N, K), device=DEV, dtype=torch.int8)
+            b = bt.t().contiguous()
             xs = torch.rand(M, device=DEV) / 8 + 1e-4
             ws = torch.rand(N, device=DEV) / 8 + 1e-4
             ref = torch._int_mm(a, b)
             emu = ref.to(torch.float32).mul_(xs[:, None]).mul_(ws[None, :]) \
                 .to(torch.bfloat16)
 
-            # 基线臂：serve 真实整链（_int_mm + 融合 epilogue）
+            # 基线臂：serve 真实整链（_int_mm 视图 + 融合 epilogue）
             def chain():
-                acc = torch._int_mm(a, b)
+                acc = torch._int_mm(a, bt.t())
                 return im._run_fused_epilogue(acc, xs, ws, None, M, N)
             t_chain, out_chain = graph_time_us(chain)
             assert torch.equal(out_chain, emu), "chain baseline != emu?"
@@ -112,7 +115,8 @@ def run():
 
                     def call():
                         im._w8a8_fused_gemm_kernel[grid](
-                            a, b, c, xs, ws, a, M, N, K,
+                            a, bt, c, xs, ws, a, M, N, K,
+                            1, K,  # [N, K] row-major: stride_wk=1, stride_wn=K
                             BLOCK_M=BM, BLOCK_N=BN, BLOCK_K=BK, GROUP_M=1,
                             HAS_BIAS=False, EVEN_M=(M % BM == 0),
                             num_warps=w, num_stages=st)

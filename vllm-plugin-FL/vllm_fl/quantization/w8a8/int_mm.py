@@ -30,6 +30,7 @@ this path unchanged.
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 import torch
 
@@ -193,6 +194,18 @@ _FUSED_WARMED: set = set()  # (K, N, even_m, cfg) specializations launched once
 _FUSED_GEMM_BROKEN = False  # memoized off-switch (never risk mgr.call crawl)
 _FUSED_GEMM_MIN_M = 256  # below this the cuBLAS chain wins (see _run_fused_gemm)
 
+
+@lru_cache(maxsize=None)
+def _v150_prefill_gemm(device: torch.device):
+    """Resolve the optional Corex GEMM only for a V150 running W8A8."""
+    if device.type != "cuda" or torch.cuda.get_device_name(device) != "Iluvatar BI-V150":
+        return None
+    try:
+        from ixformer.inference.functions.w8a8 import w8a8_gemm
+    except (ImportError, OSError):
+        return None
+    return w8a8_gemm
+
 # Decode tier, keyed (M, K, N). vLLM pads official-bench decode batches to
 # exactly M=64/128 inside the FULL_DECODE_ONLY cudagraphs; the phase0d sweep
 # (results/20261114_d2_decode_sweep) shows small-BM tiles beating the cuBLAS
@@ -203,15 +216,18 @@ _FUSED_GEMM_MIN_M = 256  # below this the cuBLAS chain wins (see _run_fused_gemm
 # stays on the chain at 1.106x); every other decode size keeps the chain.
 _FUSED_GEMM_DECODE_CONFIGS = {
     # (M, K, N) -> (BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages)
-    (64, 2048, 12288): (64, 256, 64, 1, 4, 2),  # 1.160x
-    (128, 2048, 12288): (128, 128, 64, 1, 8, 2),  # 1.219x
-    (64, 2048, 2560): (64, 128, 128, 1, 8, 2),  # 1.448x
-    (128, 2048, 2560): (128, 128, 64, 1, 8, 2),  # 1.239x
-    (64, 2048, 2048): (64, 128, 128, 1, 8, 2),  # 1.567x
-    (128, 2048, 2048): (64, 128, 128, 1, 8, 2),  # 1.616x
-    (64, 6144, 2048): (64, 128, 128, 1, 8, 2),  # 1.564x
-    (128, 6144, 2048): (64, 128, 128, 1, 8, 2),  # 1.478x
-    # lm_head (M=128 passes 1.165x; joins live traffic with the P1
+    # Ratios re-swept under the [N, K] TN storage (strided B loads):
+    # results/20261120_v150_w8a8_direct/decode_sweep_tn.log — no tile-family
+    # collapse; two optima shifted (gate_up/qkv @M=128).
+    (64, 2048, 12288): (64, 256, 64, 1, 4, 2),  # 1.208x
+    (128, 2048, 12288): (128, 256, 64, 1, 8, 2),  # 1.293x
+    (64, 2048, 2560): (64, 128, 128, 1, 8, 2),  # 1.474x
+    (128, 2048, 2560): (64, 128, 64, 1, 4, 2),  # 1.268x
+    (64, 2048, 2048): (64, 128, 128, 1, 8, 2),  # 1.576x
+    (128, 2048, 2048): (64, 128, 128, 1, 8, 2),  # 1.613x
+    (64, 6144, 2048): (64, 128, 128, 1, 8, 2),  # 1.554x
+    (128, 6144, 2048): (64, 128, 128, 1, 8, 2),  # 1.472x
+    # lm_head (M=128 passes 1.275x; joins live traffic with the P1
     # int8-lm_head checkpoint — bf16 lm_head never routes here).
     (128, 2048, 130560): (128, 256, 64, 1, 8, 2),
 }
@@ -234,9 +250,47 @@ def _fused_gemm_enabled() -> bool:
     )
 
 
+def _intmm_tn_layout() -> bool:
+    """Runtime weight-layout toggle, single source of truth.
+
+    True = weights stored ``[N, K]`` row-major (the checkpoint-native layout;
+    one scale per row). ixformer TN consumes it directly, the Triton fused
+    kernel reads it through strided B loads, and the cuBLAS chain feeds
+    ``_int_mm`` a ``.t()`` view — cuBLAS takes the transposed operand
+    natively (bit-exact, capture-safe, ~equal speed; probe2 in
+    results/20261120_v150_w8a8_direct). ``VLLM_FL_INTMM_TN=0`` restores the
+    legacy ``[K, N]`` transposed storage on every path at once — storage
+    (linear.process_weights_after_loading) and interpretation (this module)
+    both read this helper, so they can never disagree. MetaX keeps [K, N]
+    semantics here: its weights are owned by the mctlass branch.
+    """
+    if "metax" in torch.__version__.lower():
+        return False
+    return os.environ.get("VLLM_FL_INTMM_TN", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 def _fused_gemm_decode_enabled() -> bool:
     """Decode-tier (exact M=64/128) fused GEMM toggle (on by default)."""
     return os.environ.get("VLLM_FL_INTMM_FUSED_DECODE", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def _intmm_ix_enabled() -> bool:
+    """ixformer TN vendor-route toggle (on by default).
+
+    ``VLLM_FL_INTMM_IX=0`` keeps the TN storage layout but routes prefill to
+    the Triton fused kernel / cuBLAS chain — the isolation level between
+    ``VLLM_FL_INTMM_TN=0`` (restores legacy [K, N] everywhere) and the
+    per-tier fused toggles.
+    """
+    return os.environ.get("VLLM_FL_INTMM_IX", "1").lower() in (
         "1",
         "true",
         "yes",
@@ -248,7 +302,7 @@ if _HAS_TRITON:
     @triton.jit(do_not_specialize=["M"])  # bare jit; M tails must not recompile
     def _w8a8_fused_gemm_kernel(
         x_ptr,  # [M, K] int8 (bare-quant output)
-        w_ptr,  # [K, N] int8 contiguous
+        w_ptr,  # int8 contiguous: [K, N] or [N, K] (see stride_wk/stride_wn)
         y_ptr,  # [M, N] bf16 out
         xs_ptr,  # fp32, M values (per-token scale)
         ws_ptr,  # fp32, N values (per-channel scale)
@@ -256,6 +310,8 @@ if _HAS_TRITON:
         M,
         N,
         K,
+        stride_wk,  # weight stride along the K axis
+        stride_wn,  # weight stride along the N axis
         BLOCK_M: tl.constexpr,
         BLOCK_N: tl.constexpr,
         BLOCK_K: tl.constexpr,
@@ -281,7 +337,7 @@ if _HAS_TRITON:
         offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         offs_k = tl.arange(0, BLOCK_K)
         a_ptrs = x_ptr + offs_m[:, None] * K + offs_k[None, :]
-        b_ptrs = w_ptr + offs_k[:, None] * N + offs_n[None, :]
+        b_ptrs = w_ptr + offs_k[:, None] * stride_wk + offs_n[None, :] * stride_wn
         acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.int32)
         if EVEN_M:
             for _ in range(0, K, BLOCK_K):
@@ -289,7 +345,7 @@ if _HAS_TRITON:
                 b = tl.load(b_ptrs)
                 acc = tl.dot(a, b, acc, out_dtype=tl.int32)
                 a_ptrs += BLOCK_K
-                b_ptrs += BLOCK_K * N
+                b_ptrs += BLOCK_K * stride_wk
         else:
             m_mask = offs_m < M
             for _ in range(0, K, BLOCK_K):
@@ -297,7 +353,7 @@ if _HAS_TRITON:
                 b = tl.load(b_ptrs)
                 acc = tl.dot(a, b, acc, out_dtype=tl.int32)
                 a_ptrs += BLOCK_K
-                b_ptrs += BLOCK_K * N
+                b_ptrs += BLOCK_K * stride_wk
         # Epilogue tail: verbatim op order of _w8a8_int32_epilogue_kernel —
         # int32 -> fp32 -> *x_scale -> *weight_scale -> (+bias) -> bf16. The
         # two muls stay separate statements (no FMA reassociation).
@@ -343,6 +399,12 @@ if _HAS_TRITON:
         off-switch."""
         BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, num_warps, num_stages = cfg
         even_m = M % BLOCK_M == 0
+        # [K, N] row-major -> (k, n) strides (N, 1); [N, K] row-major -> (1, K).
+        # Triton specializes the ==1 stride, so each layout compiles tight.
+        if _intmm_tn_layout():
+            stride_wk, stride_wn = weight.stride(1), weight.stride(0)
+        else:
+            stride_wk, stride_wn = weight.stride(0), weight.stride(1)
         if not even_m:
             # Odd-M chunk tails keep the cuBLAS chain: the masked fused path
             # pays 3-6x predication on this backend. Official bench inputs
@@ -379,6 +441,8 @@ if _HAS_TRITON:
             M,
             N,
             K,
+            stride_wk,
+            stride_wn,
             BLOCK_M=BLOCK_M,
             BLOCK_N=BLOCK_N,
             BLOCK_K=BLOCK_K,
@@ -466,18 +530,27 @@ def _int8_scaled_mm_int_mm_impl(
         )
     if weight.ndim != 2 or weight.dtype != torch.int8:
         raise ValueError(
-            f"weight must be 2D int8 [K, N], got {weight.ndim}D {weight.dtype}"
+            f"weight must be 2D int8 [K, N] (or [N, K] in TN layout), "
+            f"got {weight.ndim}D {weight.dtype}"
         )
     M, K = x_q.shape
-    if weight.shape[0] != K:
-        raise ValueError(
-            f"K mismatch: x_q has K={K}, weight has K={weight.shape[0]}"
-        )
+    if _intmm_tn_layout():
+        # [N, K] row-major storage (checkpoint-native; see _intmm_tn_layout)
+        if weight.shape[1] != K:
+            raise ValueError(
+                f"K mismatch: x_q has K={K}, weight has K={weight.shape[1]}"
+            )
+        N = weight.shape[0]
+    else:
+        if weight.shape[0] != K:
+            raise ValueError(
+                f"K mismatch: x_q has K={K}, weight has K={weight.shape[0]}"
+            )
+        N = weight.shape[1]
     if K % 8:
         raise ValueError(
             f"torch._int_mm requires K to be a multiple of 8, got {K}"
         )
-    N = weight.shape[1]
     if x_scale.numel() != M:
         raise ValueError(f"x_scale must hold M={M} values, got {x_scale.numel()}")
     if weight_scale.numel() != N:
@@ -502,6 +575,26 @@ def _int8_scaled_mm_int_mm_impl(
         and weight_scale.dtype == torch.float32
         and (out_dtype is None or out_dtype == torch.bfloat16)
     ):
+        # ixformer TN (cuinfer card-primitive kernel, bit-exact — probe
+        # 20261120_v150_w8a8_direct): beats the Triton fused kernel 0-15% at
+        # M >= 256 and the pad-chain up to 2.7x on odd chunk tails; consumes
+        # [N, K] storage natively. Decode M={64,128} stays on the Triton tier
+        # below (13-31% faster there — the vendor kernel only has 256-row
+        # tiles, which starve at small M).
+        if (
+            _intmm_tn_layout()
+            and _intmm_ix_enabled()
+            and _FUSED_GEMM_MIN_M <= M <= 2048
+            and (K, N) in _FUSED_GEMM_CONFIGS
+            and bias is None
+            and x_scale.is_contiguous() and weight_scale.is_contiguous()
+            and x_q.device == weight.device == x_scale.device == weight_scale.device
+            and not torch.cuda.is_current_stream_capturing()
+        ):
+            gemm = _v150_prefill_gemm(x_q.device)
+            if gemm is not None:
+                return gemm(x_q, weight, x_scale, weight_scale,
+                            format="TN", out_dtype=torch.bfloat16)
         out = _run_fused_gemm(
             x_q, weight, x_scale, weight_scale, bias, M, N, K
         )
@@ -516,7 +609,10 @@ def _int8_scaled_mm_int_mm_impl(
     # single-kernel path implements the identical math (bit-equal, tested);
     # a 4-kernel torch chain costs ~90us at M=64 on this backend, i.e. more
     # than the GEMM itself.
-    acc = torch._int_mm(x_q, weight)
+    # cuBLAS int8 GEMM wants [K, N]; under TN storage feed it the transposed
+    # view — cuBLAS consumes the operand natively (bit-exact, capture-safe,
+    # ~equal speed vs contiguous: probe2, results/20261120_v150_w8a8_direct).
+    acc = torch._int_mm(x_q, weight.t() if _intmm_tn_layout() else weight)
     if (
         _HAS_TRITON
         and _fused_epilogue_enabled()
@@ -568,8 +664,10 @@ def _register_custom_op() -> bool:
             weight_scale: torch.Tensor,
             bias: torch.Tensor | None,
         ) -> torch.Tensor:
+            # N from the scale count: layout-independent ([K, N] and [N, K]
+            # storage agree on weight_scale.numel(); weight.shape differs.
             return torch.empty(
-                (x_q.shape[0], weight.shape[1]),
+                (x_q.shape[0], weight_scale.numel()),
                 dtype=torch.bfloat16,
                 device=x_q.device,
             )
@@ -595,7 +693,11 @@ def int8_scaled_mm_int_mm(
     Contract (operand semantics match ``flag_gems.scaled_mm``):
 
     - ``x_q``: ``[M, K]`` int8 activations (quantized per token)
-    - ``weight``: ``[K, N]`` int8 runtime layout (transposed checkpoint)
+    - ``weight``: int8 runtime layout — ``[K, N]`` transposed checkpoint by
+      default, ``[N, K]`` row-major when the TN layout is active
+      (``_intmm_tn_layout``, i.e. ``VLLM_FL_INTMM_TN != 0`` on this stack;
+      storage and interpretation always agree because both read the same
+      helper)
     - ``x_scale``: fp32 with ``M`` values (per-token, usually ``[M, 1]``)
     - ``weight_scale``: fp32 with ``N`` values (per-channel, usually ``[N]``)
     - ``bias``: optional ``[N]`` bias, added in fp32 before the output cast

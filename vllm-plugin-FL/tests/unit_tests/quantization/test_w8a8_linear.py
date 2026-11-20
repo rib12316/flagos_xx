@@ -23,6 +23,7 @@ from vllm.model_executor.kernels.linear import (
 from vllm.platforms import PlatformEnum
 
 from vllm_fl.quantization.w8a8 import linear
+from vllm_fl.quantization.w8a8.int_mm import _intmm_tn_layout
 from vllm_fl.quantization.w8a8.reference import (
     dynamic_per_token_quant_int8,
     w8a8_linear_reference,
@@ -243,8 +244,9 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
     kernel.process_weights_after_loading(layer)
 
     IS_METAX = "metax" in torch.__version__.lower()
-    if IS_METAX:
-        # 沐曦 mctlass 栈：unpack 天然 [N,K] 布局直存（w8a8/mctlass_mm.py）
+    if IS_METAX or _intmm_tn_layout():
+        # 沐曦 mctlass 栈 / V150 TN 布局：unpack 天然 [N,K] 直存
+        # （w8a8/mctlass_mm.py；V150 见 int_mm._intmm_tn_layout）
         assert layer.weight.shape == (3, 4)
         assert layer.weight.stride() == (4, 1)
         assert torch.equal(layer.weight, checkpoint_weight.contiguous())
@@ -273,10 +275,14 @@ def test_w8a8_linear_weight_layout_and_numerics_match_flaggems_contract(
     ):
         assert x_q.shape == (2, 4)
         assert x_scale.shape == (2, 1)
-        assert weight.shape == ((3, 4) if IS_METAX else (4, 3))
+        assert weight.shape == (
+            (3, 4) if (IS_METAX or _intmm_tn_layout()) else (4, 3)
+        )
         assert weight_scale.shape == (3,)
         operand = (
-            weight.to(torch.int32).t() if IS_METAX else weight.to(torch.int32)
+            weight.to(torch.int32).t()
+            if (IS_METAX or _intmm_tn_layout())
+            else weight.to(torch.int32)
         )
         accumulator = x_q.to(torch.int32) @ operand
         output = accumulator.to(torch.float32) * x_scale * weight_scale.reshape(1, -1)

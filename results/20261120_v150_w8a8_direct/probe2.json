@@ -1,0 +1,177 @@
+{
+  "torch": "2.10.0",
+  "triton": "3.6.0",
+  "ixformer": "0.7.0+corex.4.5.0",
+  "gpu": "Iluvatar BI-V150",
+  "probe_a": "skipped (already collected 19:3x)",
+  "probe_b": {
+    "gate_up_M16": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 37.58633333333333,
+      "us_ix_tn": 38.941916666666664
+    },
+    "gate_up_M24": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 36.772625000000005,
+      "us_ix_tn": 39.831625
+    },
+    "gate_up_M32": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 37.656708333333334,
+      "us_ix_tn": 40.256437500000004
+    },
+    "gate_up_M40": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 40.0383125,
+      "us_ix_tn": 41.2285
+    },
+    "gate_up_M48": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 40.46383333333333,
+      "us_ix_tn": 41.2980625
+    },
+    "gate_up_M72": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 52.51829166666667,
+      "us_ix_tn": 39.5195625
+    },
+    "gate_up_M64": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 36.317750000000004,
+      "us_ix_tn": 42.8274375
+    },
+    "qkv_M16": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 16.078125,
+      "us_ix_tn": 12.193874999999998
+    },
+    "qkv_M24": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.0288125,
+      "us_ix_tn": 12.1758125
+    },
+    "qkv_M32": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.4454375,
+      "us_ix_tn": 12.345208333333334
+    },
+    "qkv_M40": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.392645833333333,
+      "us_ix_tn": 12.644791666666666
+    },
+    "qkv_M48": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.652354166666665,
+      "us_ix_tn": 12.691145833333334
+    },
+    "qkv_M72": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 17.08864583333333,
+      "us_ix_tn": 12.547895833333332
+    },
+    "qkv_M64": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 10.2178125,
+      "us_ix_tn": 13.134541666666667
+    },
+    "o_M16": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.6691875,
+      "us_ix_tn": 12.164375
+    },
+    "o_M24": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 14.900645833333332,
+      "us_ix_tn": 12.266020833333332
+    },
+    "o_M32": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.053583333333332,
+      "us_ix_tn": 12.326875000000001
+    },
+    "o_M40": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.095749999999999,
+      "us_ix_tn": 12.654125
+    },
+    "o_M48": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 15.396958333333334,
+      "us_ix_tn": 12.400875
+    },
+    "o_M72": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 16.913520833333333,
+      "us_ix_tn": 12.552833333333334
+    },
+    "o_M64": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 9.4205,
+      "us_ix_tn": 12.447666666666667
+    },
+    "down_M16": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 32.398583333333335,
+      "us_ix_tn": 27.815083333333334
+    },
+    "down_M24": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 30.654875,
+      "us_ix_tn": 28.176020833333332
+    },
+    "down_M32": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 31.3185625,
+      "us_ix_tn": 28.361479166666665
+    },
+    "down_M40": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 31.116229166666667,
+      "us_ix_tn": 28.169
+    },
+    "down_M48": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 31.058729166666666,
+      "us_ix_tn": 28.179770833333333
+    },
+    "down_M72": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 34.4548125,
+      "us_ix_tn": 27.799791666666668
+    },
+    "down_M64": {
+      "parity_ix": true,
+      "parity_chain": true,
+      "us_chain": 19.901916666666665,
+      "us_ix_tn": 28.426729166666668
+    }
+  }
+}

@@ -1,0 +1,7 @@
+[prompt] 生成文本 retokenize 后 = 16802 tokens（目标 16384）
+=== ① 单请求 ISL=16384 max_tokens=24 流式 ===
+TTFT=15.53s  total=15.61s
+输出片段: ' 1.0.0\n'
+=== ② 16 并发 × ISL=16384 × OSL=128 ===
+[batch] 16/16 ok  wall=31.8s  总tok/s=8525  per-req中位=31.7s
+QUICK SMOKE DONE

@@ -61,8 +61,10 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
 
     The GEMM runs through the ``w8a8_dynamic_per_token_linear`` dispatch op
     (torch._int_mm impl preferred, FlagGems scaled_mm as ordered fallback).
-    Runtime operands are ``A=[M,K] int8``, ``B=[K,N] int8``,
-    ``scale_a=[M,1] fp32`` and ``scale_b=[N] fp32``.
+    Runtime operands are ``A=[M,K] int8``, ``B`` int8 in the active storage
+    layout (``[K,N]`` transposed, or ``[N,K]`` row-major when mctlass / the
+    V150 TN layout owns the stack), ``scale_a=[M,1] fp32`` and
+    ``scale_b=[N] fp32``.
     """
 
     @classmethod
@@ -103,11 +105,14 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
         # MetaX C500: mctlassEx w8a8_scaled_mm_azp consumes B=[N,K] row-major
         # (the unpacker's natural layout) — skip the transpose, zero copies
         # (see w8a8/mctlass_mm.py; VLLM_FL_MCTLASS_W8A8=0 restores [K,N]).
+        # BI-V150 TN 布局同理：ixformer TN 直接吃 [N,K]，链路走 .t() 视图、
+        # 融合 kernel 走 stride 加载（VLLM_FL_INTMM_TN=0 一键恢复 [K,N]）。
+        from .int_mm import _intmm_tn_layout
         from .mctlass_mm import metax_mctlass_w8a8
 
         runtime_weight = (
             weight.contiguous()
-            if metax_mctlass_w8a8()
+            if metax_mctlass_w8a8() or _intmm_tn_layout()
             else weight.t().contiguous()
         )
         replace_parameter(

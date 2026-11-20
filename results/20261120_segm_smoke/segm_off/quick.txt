@@ -1,0 +1,1 @@
+[batch] 64/64 ok  wall=43.0s  总tok/s=6444  per-req中位=43.0s

@@ -213,6 +213,20 @@ def install() -> bool:
     kernel._fl_launch_orig_run = orig_run  # 供 sweep/bench 还原默认臂
 
     # ---- hop1: wrapper 级 kv 提示（max_seqlen_k 是 CPU 侧 int，免费）----
+    # 附带 P3 segm 自适应（VLLM_FL_ATTN_SEGM=1 启用，默认关）：3D decode 段数
+    # 16→8 查表降档。2026-11-20 TD 口径实测（results/20261120_kvquant_sweep）：
+    # bs64/kv4K n16=2163μs → n8=730μs（2.96×，TD 把 n16 病理化）；bs64/kv8K
+    # +3.5%；bs64/kv16K 与 bs32/kv8K n16 仍最优（保持 16）；n32 灾难禁用。
+    # 必须在 wrapper 网格计算前改（hop2 kernel.run 级来不及）；segm 缓冲按
+    # 16 分配、n8 只用前 8 槽，越界安全；cudagraph 捕获时烘焙对应值。
+    _segm_adapt = os.environ.get("VLLM_FL_ATTN_SEGM", "0") == "1"
+    _p3_kv_limit = int(os.environ.get("P3_DIAG_KV_LIMIT", "8192"))
+    _p3_trace = os.environ.get("P3_DIAG_TRACE") == "1"
+    _p3_seen = set()
+    if _p3_trace:
+        from torch.cuda import is_current_stream_capturing
+
+        logger.info("p3-diag init enabled=%s kv_limit=%d", _segm_adapt, _p3_kv_limit)
     orig_wrapper = _tua.unified_attention
 
     def _hinted_unified_attention(*args, **kwargs):
@@ -220,6 +234,32 @@ def install() -> bool:
         tok = None
         if isinstance(mk, int) and mk > 0:
             tok = _KV_HINT.set(mk)
+        segments = kwargs.get("num_par_softmax_segments")
+        if (_segm_adapt or _p3_trace) and segments == 16:
+            try:
+                msq = kwargs.get("max_seqlen_q")
+                if msq is None and len(args) > 5:
+                    msq = args[5]
+                cu = kwargs.get("cu_seqlens_q")
+                if cu is None and len(args) > 4:
+                    cu = args[4]
+                bs = int(cu.shape[0]) - 1 if cu is not None else 0
+                kv = mk if isinstance(mk, int) and mk > 0 else None
+                if (_segm_adapt and isinstance(msq, int) and msq <= 1 and bs >= 48
+                        and isinstance(kv, int) and 0 < kv <= _p3_kv_limit):
+                    kwargs["num_par_softmax_segments"] = 8
+                if _p3_trace:
+                    after = kwargs["num_par_softmax_segments"]
+                    capturing = is_current_stream_capturing()
+                    key = (capturing, bs, msq, kv, segments, after)
+                    if key not in _p3_seen:
+                        _p3_seen.add(key)
+                        logger.info(
+                            "p3-diag capture=%d bs=%d q=%s kv=%s segments=%d->%d",
+                            capturing, bs, msq, kv, segments, after,
+                        )
+            except Exception:
+                pass
         try:
             return orig_wrapper(*args, **kwargs)
         finally:

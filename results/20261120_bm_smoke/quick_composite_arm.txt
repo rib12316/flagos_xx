@@ -1,0 +1,2 @@
+TTFT=8.16s  total=8.17s
+[batch] 16/16 ok  wall=24.1s  总tok/s=11243  per-req中位=24.1s

@@ -1,0 +1,7 @@
+[prompt] 生成文本 retokenize 后 = 4203 tokens（目标 4096）
+=== ① 单请求 ISL=4096 max_tokens=24 流式 ===
+TTFT=0.21s  total=0.47s
+输出片段: '_origs_asm_asm_asm_asm_asm_asm_asm_asm_asm_asm_'
+=== ② 64 并发 × ISL=4096 × OSL=128 ===
+[batch] 64/64 ok  wall=56.4s  总tok/s=4910  per-req中位=56.4s
+QUICK SMOKE DONE

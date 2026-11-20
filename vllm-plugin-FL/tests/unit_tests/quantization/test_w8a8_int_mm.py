@@ -24,6 +24,7 @@ from vllm_fl.dispatch import (
 from vllm_fl.quantization.w8a8.int_mm import (
     _MIN_ROWS,
     _PAD_BUFS,
+    _intmm_tn_layout,
     HAS_INT_MM,
     int8_scaled_mm_int_mm,
 )
@@ -54,8 +55,13 @@ needs_fused_tables = pytest.mark.skipif(
 _FUSED_SHAPES = [(2048, 2560), (6144, 2048)]
 
 
-def _make_operands(M, K, N, *, with_bias, seed=0):
-    """Deterministic per-token int8 x and per-channel int8 weight [K, N]."""
+def _make_operands(M, K, N, *, with_bias, seed=0, tn=None):
+    """Deterministic per-token int8 x and per-channel int8 weight.
+
+    ``tn`` picks the storage layout handed to the impl ([N, K] row-major vs
+    the legacy [K, N] transpose); None follows the active env layout, so
+    unparametrized tests track the production default.
+    """
     gen = torch.Generator().manual_seed(seed)
     x = (torch.randn(M, K, generator=gen) * 2).to(torch.bfloat16).cuda()
     weight_fp = torch.randn(N, K, generator=gen) * 0.02
@@ -72,13 +78,19 @@ def _make_operands(M, K, N, *, with_bias, seed=0):
         if with_bias
         else None
     )
-    return x_q, x_scale, weight.t().contiguous(), weight_scale, bias
+    if tn is None:
+        tn = _intmm_tn_layout()
+    stored = weight.contiguous() if tn else weight.t().contiguous()
+    return x_q, x_scale, stored, weight_scale, bias
 
 
 def _cpu_oracle_rows(x_q, weight, x_scale, weight_scale, bias, out_dtype, rows):
     """Exact int32 CPU matmul for selected output rows + emu epilogue order."""
+    w = weight.cpu().to(torch.int32)
+    if _intmm_tn_layout():
+        w = w.t().contiguous()  # storage [N, K] -> logical [K, N]
     selected = x_q[rows].cpu().to(torch.int32)
-    accumulator = selected @ weight.cpu().to(torch.int32)
+    accumulator = selected @ w
     y = accumulator.to(torch.float32)
     y = y * x_scale[rows].cpu().reshape(-1, 1)
     y = y * weight_scale.cpu().reshape(1, -1)
@@ -111,6 +123,7 @@ def _assert_bf16_matches_reference(actual, expected, bias=None):
     )
 
 
+@pytest.mark.parametrize("layout", ["tn", "kn"], ids=["TN", "KN"])
 @pytest.mark.parametrize("M", [1, 2, 5, 16, 17, 64])
 @pytest.mark.parametrize(
     "K_N",
@@ -119,10 +132,11 @@ def _assert_bf16_matches_reference(actual, expected, bias=None):
 )
 @pytest.mark.parametrize("with_bias", [False, True])
 @needs_int_mm
-def test_bitexact_small_shapes_vs_cpu_int32(M, K_N, with_bias):
+def test_bitexact_small_shapes_vs_cpu_int32(monkeypatch, layout, M, K_N, with_bias):
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1" if layout == "tn" else "0")
     K, N = K_N
     x_q, x_scale, weight, weight_scale, bias = _make_operands(
-        M, K, N, with_bias=with_bias
+        M, K, N, with_bias=with_bias, tn=layout == "tn"
     )
 
     actual = int8_scaled_mm_int_mm(
@@ -138,14 +152,16 @@ def test_bitexact_small_shapes_vs_cpu_int32(M, K_N, with_bias):
     _assert_bf16_matches_reference(actual, expected, bias)
 
 
+@pytest.mark.parametrize("layout", ["tn", "kn"], ids=["TN", "KN"])
 @pytest.mark.parametrize("M", [1, 16, 17, 64, 1024])
 @pytest.mark.parametrize("K_N", _FUSED_SHAPES, ids=["qkv", "down"])
 @pytest.mark.parametrize("with_bias", [False, True])
 @needs_int_mm
-def test_bitexact_fused_shapes_row_sampled(M, K_N, with_bias):
+def test_bitexact_fused_shapes_row_sampled(monkeypatch, layout, M, K_N, with_bias):
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1" if layout == "tn" else "0")
     K, N = K_N
     x_q, x_scale, weight, weight_scale, bias = _make_operands(
-        M, K, N, with_bias=with_bias
+        M, K, N, with_bias=with_bias, tn=layout == "tn"
     )
 
     actual = int8_scaled_mm_int_mm(
@@ -161,9 +177,11 @@ def test_bitexact_fused_shapes_row_sampled(M, K_N, with_bias):
 
 
 @needs_int_mm
+@pytest.mark.parametrize("layout", ["tn", "kn"], ids=["TN", "KN"])
 @pytest.mark.parametrize("M", [1, 5, 64])
-def test_matches_w8a8_linear_reference_end_to_end(M):
+def test_matches_w8a8_linear_reference_end_to_end(monkeypatch, layout, M):
     """Full-chain match: same quant outputs fed to the portable reference."""
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1" if layout == "tn" else "0")
     K, N = 2048, 2048
     gen = torch.Generator().manual_seed(7)
     x = (torch.randn(M, K, generator=gen) * 2).to(torch.bfloat16)
@@ -179,9 +197,14 @@ def test_matches_w8a8_linear_reference_end_to_end(M):
     )
 
     x_q, x_scale = dynamic_per_token_quant_int8(x)
+    stored = (
+        checkpoint_weight.contiguous()
+        if layout == "tn"
+        else checkpoint_weight.t().contiguous()
+    )
     actual = int8_scaled_mm_int_mm(
         x_q.cuda(),
-        checkpoint_weight.t().contiguous().cuda(),
+        stored.cuda(),
         x_scale.cuda(),
         weight_scale.cuda(),
         bias=bias.cuda(),
@@ -202,6 +225,9 @@ def test_fused_epilogue_bitidentical_to_torch_chain(
     """VLLM_FL_INTMM_FUSED_EPILOGUE toggles two paths that must be bit-equal."""
     from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
 
+    # Chain-internal toggle: keep the ixformer route out so both arms share
+    # one GEMM and only the epilogue differs (ix has its own bit-exact test).
+    monkeypatch.setenv("VLLM_FL_INTMM_IX", "0")
     K, N = K_N
     x_q, x_scale, weight, weight_scale, bias = _make_operands(
         M, K, N, with_bias=with_bias
@@ -220,6 +246,7 @@ def test_fused_epilogue_bitidentical_to_torch_chain(
     _assert_bf16_matches_reference(fused, chain, bias)
 
 
+@pytest.mark.parametrize("layout", ["tn", "kn"], ids=["TN", "KN"])
 @pytest.mark.parametrize("M", [17, 64, 1024, 2050])
 @pytest.mark.parametrize(
     "K_N",
@@ -228,18 +255,24 @@ def test_fused_epilogue_bitidentical_to_torch_chain(
 )
 @pytest.mark.parametrize("with_bias", [False, True])
 @needs_int_mm
-def test_fused_gemm_bitidentical_to_cublas_chain(monkeypatch, M, K_N, with_bias):
+def test_fused_gemm_bitidentical_to_cublas_chain(
+    monkeypatch, layout, M, K_N, with_bias
+):
     """VLLM_FL_INTMM_FUSED_GEMM toggles fused-kernel vs cuBLAS-chain paths.
 
     The fused kernel must reproduce the cuBLAS chain bit-for-bit on the
     no-bias path (model quantized projections are bias-free); M=2050
     exercises the chunk-tail M masking (2050 % 256 != 0, 2050 % 128 != 0).
+    The ixformer route is disabled so the Triton tier is what gets toggled
+    (it has its own bit-exact test below).
     """
     from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
 
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1" if layout == "tn" else "0")
+    monkeypatch.setenv("VLLM_FL_INTMM_IX", "0")
     K, N = K_N
     x_q, x_scale, weight, weight_scale, bias = _make_operands(
-        M, K, N, with_bias=with_bias
+        M, K, N, with_bias=with_bias, tn=layout == "tn"
     )
 
     monkeypatch.setenv("VLLM_FL_INTMM_FUSED_GEMM", "1")
@@ -257,6 +290,61 @@ def test_fused_gemm_bitidentical_to_cublas_chain(monkeypatch, M, K_N, with_bias)
     _assert_bf16_matches_reference(fused, chain, bias)
 
 
+_IX_SHAPES = [(2048, 2560, "qkv"), (6144, 2048, "down"),
+              (2048, 12288, "gate_up"), (2048, 2048, "o")]
+
+
+@pytest.mark.parametrize("M", [256, 1024, 2048, 257, 2047])
+@pytest.mark.parametrize("K_N", [s[:2] for s in _IX_SHAPES],
+                         ids=[s[2] for s in _IX_SHAPES])
+@needs_int_mm
+def test_ixformer_tn_route_bitexact_and_gated(monkeypatch, M, K_N):
+    """The ixformer TN vendor route: bit-exact vs the CPU oracle on table
+    shapes (including odd chunk tails 257/2047), actually dispatched to
+    w8a8_gemm, and VLLM_FL_INTMM_IX=0 removes it without changing results."""
+    from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
+
+    if int_mm_mod._v150_prefill_gemm(torch.device("cuda")) is None:
+        pytest.skip("ixformer w8a8_gemm unavailable on this stack")
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1")
+    K, N = K_N
+
+    calls = []
+    real_resolver = int_mm_mod._v150_prefill_gemm
+
+    def spy_resolver(device):
+        gemm = real_resolver(device)
+
+        def wrapped(*args, **kwargs):
+            calls.append(1)
+            return gemm(*args, **kwargs)
+
+        return wrapped if gemm is not None else None
+
+    monkeypatch.setattr(int_mm_mod, "_v150_prefill_gemm", spy_resolver)
+
+    x_q, x_scale, weight, weight_scale, bias = _make_operands(
+        M, K, N, with_bias=False, tn=True
+    )
+    actual = int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, out_dtype=torch.bfloat16
+    )
+    assert calls, f"M={M} did not route to ixformer w8a8_gemm"
+    rows = _row_indices(M)
+    expected = _cpu_oracle_rows(
+        x_q, weight, x_scale, weight_scale, None, torch.bfloat16, rows
+    ).cuda()
+    assert torch.equal(actual[rows], expected)
+
+    calls.clear()
+    monkeypatch.setenv("VLLM_FL_INTMM_IX", "0")
+    actual2 = int8_scaled_mm_int_mm(
+        x_q, weight, x_scale, weight_scale, out_dtype=torch.bfloat16
+    )
+    assert not calls, "VLLM_FL_INTMM_IX=0 must disable the vendor route"
+    _assert_bf16_matches_reference(actual2, actual, None)
+
+
 _DECODE_SHAPES = [
     (2048, 2560, "qkv"),
     (6144, 2048, "down"),
@@ -266,7 +354,7 @@ _DECODE_SHAPES = [
 ]
 
 
-def _raw_operands(M, K, N, seed=0):
+def _raw_operands(M, K, N, seed=0, tn=None):
     """Arbitrary int8 operands — enough for fused-vs-chain bit-identity
     (the GEMM contract), without the fp32 [N, K] CPU oracle tensors that
     make _make_operands heavy at lm_head's N=130560."""
@@ -275,20 +363,25 @@ def _raw_operands(M, K, N, seed=0):
         -127, 128, (M, K), generator=gen, dtype=torch.int8
     ).cuda()
     weight = torch.randint(
-        -127, 128, (K, N), generator=gen, dtype=torch.int8
+        -127, 128, (N, K), generator=gen, dtype=torch.int8
     ).cuda()
+    if tn is None:
+        tn = _intmm_tn_layout()
+    if not tn:
+        weight = weight.t().contiguous()
     xs = (torch.rand(M, generator=gen) / 8 + 1e-4).cuda()
     ws = (torch.rand(N, generator=gen) / 8 + 1e-4).cuda()
     return x_q, xs, weight, ws
 
 
+@pytest.mark.parametrize("layout", ["tn", "kn"], ids=["TN", "KN"])
 @pytest.mark.parametrize("M", [64, 128])
 @pytest.mark.parametrize("K_N", [s[:2] for s in _DECODE_SHAPES],
                          ids=[s[2] for s in _DECODE_SHAPES])
 @pytest.mark.parametrize("with_bias", [False, True])
 @needs_int_mm
 def test_decode_fused_bitidentical_to_cublas_chain(
-    monkeypatch, M, K_N, with_bias
+    monkeypatch, layout, M, K_N, with_bias
 ):
     """VLLM_FL_INTMM_FUSED_DECODE toggles decode-tier fused vs cuBLAS chain
     at the exact-M table points; must stay bit-equal on the bias-free path.
@@ -296,8 +389,9 @@ def test_decode_fused_bitidentical_to_cublas_chain(
     both arms take the chain there, a trivial pass that documents intent."""
     from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
 
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1" if layout == "tn" else "0")
     K, N = K_N
-    x_q, xs, weight, ws = _raw_operands(M, K, N, seed=M)
+    x_q, xs, weight, ws = _raw_operands(M, K, N, seed=M, tn=layout == "tn")
     bias = None
     if with_bias:
         gen = torch.Generator().manual_seed(M + 1)
@@ -360,12 +454,15 @@ def test_decode_tier_routes_exact_m_only(monkeypatch):
 
 @needs_int_mm
 @needs_fused_tables
-def test_warm_key_distinguishes_decode_and_prefill_cfg():
+def test_warm_key_distinguishes_decode_and_prefill_cfg(monkeypatch):
     """A warmed prefill specialization must not green-light an unwarmed
     decode tile inside a cudagraph capture: Triton JIT compiles carry
     device-side syncs, so the warm key carries the config tuple."""
     from vllm_fl.quantization.w8a8 import int_mm as int_mm_mod
 
+    # This is about the Triton tier's warm bookkeeping — keep the ixformer
+    # vendor route from swallowing the M=1024 prefill call.
+    monkeypatch.setenv("VLLM_FL_INTMM_IX", "0")
     K, N = 2048, 2560
     int_mm_mod._FUSED_WARMED.clear()
     try:
@@ -420,8 +517,9 @@ def test_fused_gemm_survives_fullgraph_compile():
 
     K, N = 2048, 2560  # fused config-table shape
     gen = torch.Generator().manual_seed(11)
+    w8_shape = (N, K) if _intmm_tn_layout() else (K, N)
     w8 = torch.randint(
-        -127, 128, (K, N), generator=gen, dtype=torch.int8
+        -127, 128, w8_shape, generator=gen, dtype=torch.int8
     ).cuda()
     ws = (torch.rand(N, generator=gen) / 8 + 1e-4).cuda()
 
@@ -497,8 +595,9 @@ def test_pre_resolved_ops_survive_fullgraph_compile():
     assert mm.pre_resolve() == DEFAULT_W8A8_IMPL
 
     x = torch.randn(4, 64, device="cuda", dtype=torch.bfloat16)
-    # K=64,N=32；沐曦布局契约为 [N,K]（mctlass 承载，见 w8a8/mctlass_mm.py）
-    w8_shape = (32, 64) if IS_METAX else (64, 32)
+    # K=64,N=32；沐曦布局契约为 [N,K]（mctlass 承载，见 w8a8/mctlass_mm.py），
+    # V150 TN 布局同为此约定（_intmm_tn_layout）。
+    w8_shape = (32, 64) if (IS_METAX or _intmm_tn_layout()) else (64, 32)
     w8 = torch.randint(-127, 128, w8_shape, device="cuda", dtype=torch.int8)
     ws = torch.rand(32, device="cuda")
 
@@ -554,8 +653,17 @@ def test_pad_buffer_reuse_is_stateless_across_calls():
     )
 
 
-def test_validates_operand_contract():
-    weight = torch.ones(8, 3, dtype=torch.int8)
+@pytest.mark.parametrize("layout", ["tn", "kn"], ids=["TN", "KN"])
+def test_validates_operand_contract(monkeypatch, layout):
+    monkeypatch.setenv("VLLM_FL_INTMM_TN", "1" if layout == "tn" else "0")
+
+    def stored(k, n, dtype=torch.int8):
+        ones = torch.ones(n, k, dtype=dtype) if layout == "tn" else torch.ones(
+            k, n, dtype=dtype
+        )
+        return ones
+
+    weight = stored(8, 3)
     weight_scale = torch.ones(3, dtype=torch.float32)
     x_scale = torch.ones(2, 1, dtype=torch.float32)
 
@@ -566,7 +674,7 @@ def test_validates_operand_contract():
     with pytest.raises(ValueError, match="weight must be 2D int8"):
         int8_scaled_mm_int_mm(
             torch.ones(2, 8, dtype=torch.int8),
-            torch.ones(8, 3, dtype=torch.bfloat16),
+            stored(8, 3, dtype=torch.bfloat16),
             x_scale,
             weight_scale,
         )
@@ -577,7 +685,7 @@ def test_validates_operand_contract():
     with pytest.raises(ValueError, match="multiple of 8"):
         int8_scaled_mm_int_mm(
             torch.ones(2, 12, dtype=torch.int8),
-            torch.ones(12, 3, dtype=torch.int8),
+            stored(12, 3),
             x_scale,
             weight_scale,
         )
@@ -688,8 +796,6 @@ def test_dispatch_falls_back_to_scaledmm_when_intmm_fails(monkeypatch):
 
 @needs_int_mm
 def test_apply_weights_end_to_end_through_dispatch(monkeypatch):
-    from types import SimpleNamespace
-
     from vllm_fl.quantization.w8a8.linear import FLW8A8DynamicLinearKernel
 
     K, N, M = 2048, 2048, 5
@@ -706,18 +812,20 @@ def test_apply_weights_end_to_end_through_dispatch(monkeypatch):
         x.reshape(M, K), checkpoint_weight, weight_scale.reshape(-1, 1), bias
     )
 
-    layer = SimpleNamespace(
-        weight=torch.nn.Parameter(
-            (checkpoint_weight.contiguous().cuda() if IS_METAX
-             else checkpoint_weight.t().contiguous().cuda()), requires_grad=False
-        ),
-        weight_scale=torch.nn.Parameter(
-            weight_scale.to(torch.float32).cuda(), requires_grad=False
-        ),
-        input_scale=None,
-        input_zero_point=None,
-        azp_adj=None,
-    )
+    class _Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(
+                checkpoint_weight.cuda(), requires_grad=False
+            )
+            self.weight_scale = torch.nn.Parameter(
+                weight_scale.to(torch.float32).cuda(), requires_grad=False
+            )
+            self.input_scale = None
+            self.input_zero_point = None
+            self.azp_adj = None
+
+    layer = _Layer()
     kernel = object.__new__(FLW8A8DynamicLinearKernel)
     kernel.layer_param_names = [
         "weight",
@@ -726,6 +834,12 @@ def test_apply_weights_end_to_end_through_dispatch(monkeypatch):
         "input_zero_point",
         "azp_adj",
     ]
+    # 走真实 process_weights_after_loading：本测试同时覆盖 TN/MetaX/legacy
+    # 三分支的存储布局决策（linear.py 单一事实源 _intmm_tn_layout）。
+    kernel.process_weights_after_loading(layer)
+    assert layer.weight.shape == (
+        (N, K) if (IS_METAX or _intmm_tn_layout()) else (K, N)
+    )
     monkeypatch.setattr(
         "vllm_fl.quantization.w8a8.linear._dynamic_per_token_quant_int8",
         lambda value: dynamic_per_token_quant_int8(value),
