@@ -1,7 +1,15 @@
-# delivery/s2-final —— 交付分支（唯一事实源）
+# final-submition 双平台交付汇总
 
-> 天数 BI-V150 侧开发**封板**（2026-11-19）。后续：沐曦 C500 clone 本分支、
-> 在本分支上完成 metax 适配与官方 bench/精度，最后双平台合并出提交 zip。
+2026-11-20 汇总。运行源码 `vllm-plugin-FL/` 和 `FlagGems/` 取自双卡验收标签 `delivery-final-1119`（`ffd0daf`）。4K、16K 列均为官方总吞吐，单位 tok/s。
+
+| 平台 | 已验收的默认优化 | 4K | 16K | 105 题精度 |
+|---|---|---:|---:|---:|
+| 沐曦 C500 | W8A8 线性层和 lm_head、mctlassEx INT8 矩阵乘及零拷贝权重布局 | 6399.21 | 7509.87 | 98.1% |
+| 天数 BI-V150 | attention 启动参数、TD 和 TILE、调度 watermark、W8A8 及采样过滤 | 3414.58 | 1570.62 | 97.14% |
+
+官方测量记录见 [C500 汇总](results/20261119_d4_metax_port/final/SUMMARY.md) 和 [V150 逐轮结果与精度](results/d3_official_1116_2222/)。
+
+C500 四项融合在 32、64 条请求的小样本中分别提速 2.86%、1.29%，4 条贪心样例中有 3 条输出分叉，官方精度待验。候选实现保留于 `feat/c500-fusion-bundle@a3b32dd`。V150 的 P1 重标定也处于候选阶段，见 `feat/v150-attn-bm@7574909`。TileLang 探索已结束。[C500 融合逐轮数据与输出](results/20261120_fusion_bundle/)
 
 ## 天数侧终局状态（本分支基线 = 9ddaa0f + ①⑤ 默认翻转）
 
@@ -41,14 +49,17 @@ vllm serve /workspace/MiniCPM5-2B-w8a8-v2 \
   --max-model-len 131072
 ```
 
-## 沐曦侧待办（clone 本分支后）
+## 沐曦侧待办（✅ 1-4 已于 2026-11-19 完成，见下「沐曦侧终局」；⬜ 5 = 出包待办）
 
-1. `git merge feat/d4-metax-port`（bedf8ca mctlassEx w8a8 + c948594 接线；与本分支仅
-   attn_td/tile_mode 两文件可能小冲突，保留本分支默认开语义）
-2. 官方沐曦 serve 命令**无 `--compilation-config`**——数字须在该形态成立
-3. 全部优化默认激活审计（评测只设 `VLLM_PLUGINS=fl`；默认关 = 复现不存在）
-4. 官方 bench 4K/16K 各 4 轮（丢首均值，记 Mean TTFT）+ 105 题 ≥0.95
-5. 双平台源码合并 → 参赛队伍.zip（模板：FlagGems(v5.3.5 原样)/readme/report/
+1. ✅ `git merge feat/d4-metax-port`（`4eb72df` 入本分支；bedf8ca mctlassEx w8a8 +
+   c948594 接线，保留默认开语义）
+2. ✅ 官方沐曦 serve 命令**无 `--compilation-config`**——终局数字在该形态成立
+   （4K 6399.21 / 16K 7509.87）
+3. ✅ 全部优化默认激活审计（零附加 env 起 serve，审计行
+   `w8a8_dynamic_per_token_linear → default.flagos_mctlass` ✓）
+4. ✅ 官方 bench 4K/16K 各 4 轮（丢首均值）+ 105 题 98.1% ≥0.95
+   （Mean TTFT 未单独汇总，raw_runs CSV 在档可查）
+5. ⬜ 双平台源码合并 → 参赛队伍.zip（模板：FlagGems(v5.3.5 原样)/readme/report/
    vllm-plugin-FL）→ 提交平台 + 评审后 PR
 
 ## 纪律红线（全程有效）
@@ -64,8 +75,9 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
   （results/20261119_submit_audit/serve_defaults.log）
 - parity 0/16 = ①⑤ 非位精确的**预期分歧**（基线采自无 patch 态，DEVLOG 步骤 0
   在案；真精度门 = 105 题 0.9714）
-- w8a8 再生命令已实跑（295 tensors packed，RESULT 行可查）；逐位 diff 对照
-  w8a8-v2 的最终校验待办（沐曦侧合并后一并做）
+- w8a8 再生命令已实跑（295 tensors packed，RESULT 行可查）；沐曦侧已再生并
+  roundtrip 位校验（295 tensors bit_exact，`results/20261119_d4_metax_port/PROVENANCE`
+  在案）——原「逐位 diff 对照」待办就此关闭
 - ttft 双场景大优（上表）
 
 ## 沐曦侧终局（2026-11-19 23:20 完成，官方形态实测）

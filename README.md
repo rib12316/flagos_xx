@@ -2,6 +2,8 @@
 
 > 队伍 infragogogo（xxinfra）｜MiniCPM5-2B 推理吞吐优化（total tokens/s，4K/16K 双场景）｜沐曦 C500 64GB + 天数 BI-V150 32GB｜截止 2026-11-20 23:59
 
+`final-submition` 汇总两台机器通过官方吞吐与精度验收的版本。双卡成绩、默认优化、权重转换和启动命令见 [DELIVERY.md](DELIVERY.md)。
+
 ## 仓库定位（重要）
 
 - 本仓库是**唯一的开发仓库**，从上游官方基线从零搭建，与旧仓库 `flagos2_infragogogo` **完全隔离**：旧仓库的代码、分支、改动一律不混入；其历史数据（D3a/D3c launch 调优证据、KV 量化负结果、profile 数据）仅作为**证据引用**（口径需注明"调优版/废弃仓库"）。
@@ -26,8 +28,8 @@
 ## 安装与验证（实例侧）
 
 ```bash
-git clone https://github.com/rib12316/flagos_xx.git
-cd flagos_xx/vllm-plugin-FL && pip install --no-build-isolation .   # 或 --no-deps --force-reinstall
+git clone --branch final-submition https://github.com/rib12316/flagos_xx.git
+cd flagos_xx/vllm-plugin-FL && pip install --no-deps --no-build-isolation .
 ```
 
 **pip provenance 纪律**（F5 教训，每次测量前执行）：`pip show vllm-fl | grep -i location` + `direct_url.json` 指向本仓库路径；diff `site-packages` 与本仓库源码一致；确认旧仓库 patch 符号不存在；`flag_gems` 版本 == v5.3.5。
