@@ -68,6 +68,19 @@ from vllm.v1.kv_cache_interface import AttentionSpec
 from .mla.common import QueryLenSupport
 
 logger = init_logger(__name__)
+_bundle_logger = init_logger("vllm.fusion_bundle")
+
+
+def _grouped_decode_out(q, k, v, pages, lengths, scale, dst):
+    import flash_attn_2_cuda
+
+    # The vendor ABI checks out after internally grouping eight queries per KV head.
+    out = dst.view(q.size(0), 2, 8, 128).transpose(1, 2)
+    flash_attn_2_cuda.fwd_kvcache(
+        q, k, v, None, None, lengths.contiguous(), None, None, None, None,
+        pages if pages.stride(-1) == 1 else pages.contiguous(), None, out,
+        scale, True, -1, -1, 0.0, True, 0, None,
+    )
 
 
 @register_backend(AttentionBackendEnum.FLASH_ATTN)
@@ -656,6 +669,14 @@ class FlashAttentionImpl(AttentionImpl):
             )
 
         self.sinks = sinks
+        from vllm_fl.envs import fusion_enabled
+
+        self.direct_grouped = (
+            fusion_enabled("VLLM_FL_FLASH_KVCACHE_DIRECT_OUT")
+            and (num_heads, num_kv_heads, head_size) == (16, 2, 128)
+            and self.sliding_window == (-1, -1) and self.alibi_slopes is None
+            and self.logits_soft_cap == 0 and sinks is None
+        )
         if self.sinks is not None:
             assert flash_attn_supports_sinks(), (
                 "Sinks are only supported in FlashAttention 3"
@@ -827,6 +848,18 @@ class FlashAttentionImpl(AttentionImpl):
                     decode_query = reshape_query_for_spec_decode(
                         decode_query, attn_metadata.num_decodes
                     )
+                    if (self.direct_grouped and decode_query.shape[1:] == (1, 16, 128)
+                            and decode_query.stride(-1) == 1 and output.is_contiguous()
+                            and output.shape[1:] == (16, 128)
+                            and output.dtype == decode_query.dtype == key_cache.dtype
+                            == value_cache.dtype == torch.bfloat16):
+                        _grouped_decode_out(
+                            decode_query, key_cache, value_cache,
+                            attn_metadata.decode_block_table, attn_metadata.decode_seq_lens,
+                            self.scale, output[:num_decode_tokens],
+                        )
+                        _bundle_logger.info_once("F-c grouped decode out active")
+                        return output
                     output_unreshape = flash_attn_with_kvcache(
                         q=decode_query,
                         k_cache=key_cache,

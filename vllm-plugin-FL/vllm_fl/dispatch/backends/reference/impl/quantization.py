@@ -49,3 +49,39 @@ def w8a8_dynamic_per_token_linear_torch(
     if bias is not None:
         y = y + bias
     return y.to(out_dtype if out_dtype is not None else torch.bfloat16)
+
+
+def fused_add_rms_norm_quant_int8_torch(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    epsilon: float,
+    scale_out: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Reference two-step torch chain (norm → quant) for the fused D13 op.
+
+    Matches the Triton bare kernel's intermediate-precision semantics:
+    h=(x+residual) lands in bf16, the norm output lands in bf16 before the
+    f32 quant math. Uses the w8a8 reference quantizer for the second step.
+    ``scale_out``（§3.5 接线侧信道）：给定时写入其前 M 行并返回该切片（与
+    flaggems impl 签名 parity）。
+    """
+    h = x + residual                                    # bf16 intermediate
+    hf = h.float()
+    var = hf.pow(2).sum(-1, keepdim=True) / h.shape[1]
+    y = (hf * torch.rsqrt(var + epsilon)
+         * weight.to(torch.float32)).to(torch.bfloat16)
+    from vllm_fl.quantization.w8a8.reference import (
+        dynamic_per_token_quant_int8,
+    )
+    q, scale = dynamic_per_token_quant_int8(y)
+    if scale_out is not None:
+        if scale_out.ndim != 2 or scale_out.shape[1] != 1 \
+                or scale_out.shape[0] < x.shape[0] \
+                or scale_out.dtype != torch.float32:
+            raise ValueError(
+                f"scale_out must be [≥{x.shape[0]},1] fp32, "
+                f"got {tuple(scale_out.shape)}")
+        scale_out[: x.shape[0]].copy_(scale)
+        scale = scale_out[: x.shape[0]]
+    return q, scale, h

@@ -52,6 +52,17 @@ class ReferenceBackend(Backend):
 
         return dynamic_per_token_quant_int8_torch(x)
 
+    def fused_add_rms_norm_quant_int8(
+        self,
+        x: torch.Tensor,
+        residual: torch.Tensor,
+        weight: torch.Tensor,
+        epsilon: float,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        from .impl.quantization import fused_add_rms_norm_quant_int8_torch
+
+        return fused_add_rms_norm_quant_int8_torch(x, residual, weight, epsilon)
+
     def w8a8_dynamic_per_token_linear(
         self,
         x_q: torch.Tensor,
