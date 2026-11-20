@@ -75,6 +75,18 @@ logger = logging.getLogger("vllm.d13_norm_quant")
 _OP_NAME = "fused_add_rms_norm_quant_int8"
 _fused_op = CachedOp(_OP_NAME)
 
+
+@torch.library.custom_op("vllm_fl::d13_norm_quant", mutates_args=("scale_out",))
+def _compiled_d13(x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor,
+                  epsilon: float, scale_out: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    q, _, resid = _fused_op(x, residual, weight, epsilon, scale_out=scale_out)
+    return q, resid
+
+
+@_compiled_d13.register_fake
+def _fake_compiled_d13(x, residual, weight, epsilon, scale_out):
+    return torch.empty_like(x, dtype=torch.int8), torch.empty_like(residual)
+
 # 配对规则：(decoder 层上的 norm 属性, 消费者属性链, 是否跳过 layer0)。
 # layer0 的 input_layernorm 前无 residual（llama.py 首 layer 残差链未起），
 # 无 add 可融。逐模型核对勿默认——本表仅对 _SUPPORTED 里的 decoder 类成立。
@@ -169,9 +181,8 @@ def _d13_forward(norm, x, residual=None):
     """配对 norm 的融合入口。residual=None 与 M>m_fuse_max 走原两步链。"""
     if residual is None or x.shape[0] > norm._fl_d13_m_max:
         return norm._fl_d13_orig(x, residual)
-    q, _, resid = _fused_op(
-        x, residual, norm.weight.data, norm.variance_epsilon,
-        scale_out=norm._fl_d13_scale)
+    q, resid = _compiled_d13(
+        x, residual, norm.weight.data, norm.variance_epsilon, norm._fl_d13_scale)
     # 契约同 fused_add_rms_norm：(out, residual)；out 为 int8 预量化激活，
     # 由配对 linear 的 _fl_expects_prequant 分支消费（w8a8/linear.py）。
     return q, resid
