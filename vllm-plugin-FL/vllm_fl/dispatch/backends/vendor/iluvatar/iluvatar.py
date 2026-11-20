@@ -235,6 +235,27 @@ def patch_sampler_compile_for_iluvatar() -> None:
 patch_sampler_compile_for_iluvatar()
 
 
+def install_attn_bm_mode_for_iluvatar() -> None:
+    """Prefill BLOCK_M 耦合重标定 BM256/W16/S2/T128 (see attn_bm_mode).
+
+    BI-V150 tune: prefill attention 9.4-9.9x vs upstream / 5.7-6.0x vs 旧生产
+    (blockm sweep, graph-mode). TILE=128 非 bit-exact（与 ⑤/① 同漂移类）；
+    与 ①TD 互斥（TD 钳位 TILE<=block_size）。默认 OFF，VLLM_FL_ATTN_BM=1
+    启用（待官方 4 轮 + 105 题门后转默认开）。
+
+    **必须在 attn_launch_config 之前装载**：alc hop1 闭包捕获当时的
+    unified_attention 绑定——本模块先重 exec 原函数，alc 再包 BM 版，
+    链 = hop1 hint → BM-patched → hop2 kernel.setdefault（prefill 显式
+    warps 使 setdefault 让位，decode 仍走 D0 表）。
+    """
+    from .attn_bm_mode import install as _install_attn_bm_mode
+
+    _install_attn_bm_mode()
+
+
+install_attn_bm_mode_for_iluvatar()
+
+
 def install_attn_launch_config_for_iluvatar() -> None:
     """Install the data-driven launch-config table for vllm's unified attention
     kernel.
