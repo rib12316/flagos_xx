@@ -1,0 +1,42 @@
+INFO 11-20 13:03:35 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-20 13:03:35 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-20 13:03:35 [__init__.py:49] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+/opt/conda/lib/python3.12/site-packages/torch/library.py:381: UserWarning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: _C::cutlass_scaled_mm_supports_fp8(int cuda_device_capability) -> bool
+    registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+  dispatch key: CompositeImplicitAutograd
+  previous kernel: registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+       new kernel: registered at /dev/null:95 (Triggered internally at /workspace/framework/mcPytorch/aten/src/ATen/core/dispatch/OperatorEntry.cpp:218.)
+  self.m.impl(
+INFO Print the version information of mcoplib during compilation.
+
+Version info:Mcoplib_Version = '0.4.5'
+Build_Maca_Version = '3.7.0.37'
+GIT_BRANCH = 'HEAD'
+GIT_COMMIT = 'a9125e4'
+Vllm Op Version = 0.20.0
+SGlang Op Version  = 0.5.10 
+
+INFO Staring Check the current MACA version of the operating environment.
+
+INFO: Release major.minor matching,  successful:3.7. 
+
+INFO 11-20 13:03:38 [__init__.py:237] Platform plugin fl is activated
+/opt/conda/lib/python3.12/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/opt/conda/lib/python3.12/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+[2026-11-20 13:03:43] [INFO] [vllm_fl.dispatch.backends.vendor.metax.attn_splitkv_hop] fl.attn-splitkv(metax): VLLM_FL_ATTN_SPLITKV=0，保持 MACA flash
+W1120 13:03:43.466000 339006 site-packages/torch/utils/cpp_extension.py:2527] TORCH_CUDA_ARCH_LIST is not set, all archs for visible cards are included for compilation. 
+W1120 13:03:43.466000 339006 site-packages/torch/utils/cpp_extension.py:2527] If this is not desired, please set os.environ['TORCH_CUDA_ARCH_LIST'] to specific architectures.
+Traceback (most recent call last):
+  File "/data/flagos_feat_fc/scripts/fc/t0_direct_out.py", line 95, in <module>
+    main()
+  File "/data/flagos_feat_fc/scripts/fc/t0_direct_out.py", line 62, in main
+    arm_b(out, q, kc, vc, bt, sl)
+  File "/data/flagos_feat_fc/scripts/fc/t0_direct_out.py", line 51, in arm_b
+    _flash_kvcache_direct_out(
+  File "/data/flagos_feat_fc/vllm-plugin-FL/vllm_fl/dispatch/backends/vendor/metax/impl/attention/flash_attn.py", line 133, in _flash_kvcache_direct_out
+    _fa2.fwd_kvcache(
+RuntimeError: out must have shape (batch_size, seqlen_q, num_heads, head_size_og)
