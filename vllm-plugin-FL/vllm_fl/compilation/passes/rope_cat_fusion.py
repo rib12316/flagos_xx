@@ -56,7 +56,6 @@ from vllm.compilation.passes.vllm_inductor_pass import (
     VllmPatternReplacement,
     _remove_noop_permutes,
 )
-from vllm.compilation.passes.fusion.matcher_utils import MatcherRotaryEmbedding
 from vllm.config import VllmConfig
 from vllm.logger import init_logger
 from vllm.utils.torch_utils import direct_register_custom_op
@@ -210,23 +209,13 @@ FUSED_OP = torch.ops.vllm.fl_rope_qk_cat.default
 
 
 class FLRopeQKCatPattern(VllmPatternReplacement):
-    """match {split → native rope(q,k)} → 替换为 vllm.fl_rope_qk_cat。
-
-    输出形态（flat_outputs）必须与**真实图**逐节点同构：
-    - flat=True（生产图实测形态，默认）：rope 的 aten.cat 输出直接是 figure
-      输出 `(cat[T,2048], cat_1[T,256], v_view[T,256 strided])`——下游
-      reshape 在**另一个 piecewise 图**里（splitting op 切开）。首次 0 命中
-      的就是这里：pattern 多要了 cat→view 节点，真实图没有。
-    - flat=False：备用（若某些图 rope 后紧跟 head-view）。
-    """
+    """Match NeoX rotation with head-shaped Q/K and a strided V view."""
 
     def __init__(
         self,
         num_q_heads: int,
         num_kv_heads: int,
         head_size: int,
-        is_neox: bool,
-        flat_outputs: bool = True,
     ) -> None:
         self.num_q_heads = num_q_heads
         self.num_kv_heads = num_kv_heads
@@ -234,18 +223,6 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         self.q_size = num_q_heads * head_size
         self.k_size = num_kv_heads * head_size
         self.v_size = num_kv_heads * head_size
-        self.is_neox = is_neox
-        self.flat_outputs = flat_outputs
-        # enabled=False → 追踪 forward_native（aten 分解），与 compile 图同构；
-        # 不跟随 RotaryEmbedding.enabled()（本机 _C.rotary_embedding 存在但
-        # compile 模式仍走 native，默认态会错配 custom-op 形态的 pattern）。
-        self.rope_matcher = MatcherRotaryEmbedding(
-            is_neox=is_neox,
-            head_size=head_size,
-            num_heads=num_q_heads,
-            num_kv_heads=num_kv_heads,
-            enabled=False,
-        )
 
     def get_inputs(self) -> list:
         T = 5
@@ -269,9 +246,8 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         ApplyRotaryEmb.forward_static（只做旋转、无末尾 reshape）。
         """
         q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
-        num_q_heads, num_kv_heads = self.num_q_heads, self.num_kv_heads
+        num_kv_heads = self.num_kv_heads
         head_size = self.head_size
-        is_neox = self.is_neox
 
         def pattern(qkv, positions, cos_sin_cache):
             from vllm.model_executor.layers.rotary_embedding.common import (
@@ -281,13 +257,23 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
             q, k, v = qkv.split([q_size, k_size, v_size], dim=-1)
             cos_sin = cos_sin_cache.index_select(0, positions)
             cos, sin = cos_sin.chunk(2, dim=-1)
-            q3 = q.view(-1, num_q_heads, head_size)
-            k3 = k.view(-1, num_kv_heads, head_size)
-            q3 = ApplyRotaryEmb.forward_static(q3, cos, sin, is_neox)
-            k3 = ApplyRotaryEmb.forward_static(k3, cos, sin, is_neox)
+            q3 = q.view(positions.shape[0], -1, head_size)
+            k3 = k.view(positions.shape[0], -1, head_size)
+            q3 = ApplyRotaryEmb.forward_static(q3, cos, sin, True)
+            k3 = ApplyRotaryEmb.forward_static(k3, cos, sin, True)
             return q3, k3, v.view(-1, num_kv_heads, head_size)
 
         return pattern
+
+    def supports_layout(self, match: pm.Match) -> bool:
+        qkv, pos, cache = (match.kwargs[key].meta['val'] for key in
+                           ('qkv', 'positions', 'cos_sin_cache'))
+        return (qkv.dtype == cache.dtype == torch.bfloat16 and pos.dtype == torch.int64
+                and qkv.device.type == 'cuda' and qkv.device == pos.device == cache.device
+                and qkv.ndim == cache.ndim == 2 and pos.ndim == 1
+                and qkv.shape[0] == pos.shape[0] and cache.shape[1] == self.head_size
+                and qkv.shape[1] == self.q_size + self.k_size + self.v_size
+                and all(t.is_contiguous() for t in (qkv, pos, cache)))
 
     @property
     def replacement(self):
@@ -337,20 +323,8 @@ class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
                 num_q_heads, num_kv_heads, head_size,
             )
             return
-        # is_neox 两态 × 输出形态两态 × 追踪归一化两态。
-        # - 追踪归一化两态：_trace_fn 会把 pattern 的 aten.view 改写成
-        #   aten.reshape；真实 vllm 图在 pass 时刻**仍是 aten.view**（从
-        #   /tmp/torchinductor_root 的 cached aten 图实证），故必须同时注册
-        #   保留 view 的变体，否则 target 就不同（aten.view ≠ aten.reshape）。
-        # - 输出形态两态：生产图是 flat（见 FLRopeQKCatPattern docstring）。
-        for is_neox in (True, False):
-            for flat in (True, False):
-                self._register_variants(
-                    FLRopeQKCatPattern(
-                        num_q_heads, num_kv_heads, head_size, is_neox,
-                        flat_outputs=flat,
-                    )
-                )
+        if (num_q_heads, num_kv_heads, head_size) == (16, 2, 128):
+            self._register_variants(FLRopeQKCatPattern(num_q_heads, num_kv_heads, head_size))
         self.dump_patterns(config, self.pm_pass)
 
     @enable_fake_mode
@@ -362,10 +336,11 @@ class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
                 pr.get_inputs(),
                 trace_fn,
                 self.pm_pass,
+                extra_check=pr.supports_layout,
             )
             self._pattern_replacements.append(pr)
         _probe(
-            f"REGISTER neox={pr.is_neox} flat={pr.flat_outputs} "
+            "REGISTER neox=True head_outputs=True "
             f"total={len(self._pattern_replacements)}"
         )
 
