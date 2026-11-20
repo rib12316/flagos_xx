@@ -1,0 +1,6 @@
+so md5 0953e2b9d24f32768bd31fb1bbdfe3c1
+public q torch.Size([32, 1, 16, 128]) (2048, 2048, 128, 1)
+internal out torch.Size([32, 8, 2, 128]) (2048, 128, 1024, 1)
+returned (32, 1, 16, 128) (2048, 2048, 128, 1) aliases dst True target bitwise vs wrapper True
+graph replay 0 bitwise True aliases dst True
+graph replay 1 bitwise True aliases dst True

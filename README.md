@@ -2,7 +2,16 @@
 
 > 队伍 infragogogo（xxinfra）｜MiniCPM5-2B 推理吞吐优化（total tokens/s，4K/16K 双场景）｜沐曦 C500 64GB + 天数 BI-V150 32GB｜截止 2026-11-20 23:59
 
-`final-submition` 是 C500 全量融合待评测版本，四项融合在沐曦默认启用。双卡历史成绩、当前优化清单、权重转换和启动命令见 [DELIVERY.md](DELIVERY.md)。
+`final-submition` 是最终提交分支：沐曦四项融合默认启用（metax-only，零附加 env），待官方全量 bench 与 105 题精度评测。优化清单、权重转换和启动命令见 [DELIVERY.md](DELIVERY.md)。
+
+## 已验收成绩（2026-11-19 双平台官方口径 = 上一封板版本）
+
+| 平台 | 4K 场景 | 16K 场景 | 105 题精度 | 出处 |
+|---|---|---|---|---|
+| 沐曦 C500 64GB | **6399.21 tok/s**（vs 基线 3786.30 = **+69.0%**） | **7509.87 tok/s**（vs 5583.49 = **+34.5%**） | **98.1%**（105/105） | `results/20261119_d4_metax_port/final/SUMMARY.md` |
+| 天数 BI-V150 32GB | **3414.58 tok/s**（vs 1879.68 = **+81.7%**） | **1570.62 tok/s**（vs 862.06 = **+82.2%**） | **0.9714** | `DELIVERY.md`（`results/d3_official_1116_2222/`） |
+
+双平台均为官方 serve 形态（参数官方锁死、零附加 env）、4 轮丢首取均值；最终交付事实源 = 分支 `final-submition` 的 `DELIVERY.md`。
 
 ## 仓库定位（重要）
 
@@ -15,12 +24,14 @@
 |---|---|---|
 | vllm-plugin-FL | branch `flagos-2026-s2` | `13eb9be69ecc5b5ca4f79c44e9ee40081eaa1bf0`（== 官方分支头 == 实例 `/workspace/vllm-plugin-FL` 干净树） |
 | FlagGems | tag `v5.3.5` | `a7620cc191a0b42e040194622c5758b22a7a25dc` |
-| 天数基线（10-30 纯净版实测） | 4K=1879.68 tok/s｜16K=862.06｜math_500 L3=0.962 | 待补沐曦基线数字入 `docs/00-统一假设台账.md` |
+| 天数基线（10-30 纯净版实测） | 4K=1879.68 tok/s｜16K=862.06｜math_500 L3=0.962 | 官方口径 4 轮丢首 |
+| 沐曦基线（11-19 纯净版实测） | 4K=3786.30 tok/s｜16K=5583.49｜math_500 L3=98.1%（10-30 bf16 基线同值） | 同口径；`results/20261119_d4_metax_port/baseline/SUMMARY.md`，已录入 `docs/00-统一假设台账.md` §8 |
 
 纯基线 commit 打 tag **`baseline-2026-11-03`**；任何时刻的总优化量 = `git diff baseline-2026-11-03 -- vllm-plugin-FL FlagGems`。
 
 ## 分支约定
 
+- `delivery/s2-final`：**交付分支（唯一事实源）**——2026-11-19 封板并完成沐曦侧终局实测（终局成绩与激活方式见 `DELIVERY.md`）。
 - `main`：集成分支，只接受验证通过（T0→T1→精度 gate）的改动，保持随时可提交状态；**上一个合入项即成为下一个假设的对照基线**。
 - `feat/<假设编号>`：每个假设一条分支，**从最新 main 切出**（D0 为唯一例外，自 baseline tag 切出）；`git diff main..feat/<编号>` 只含本假设改动（单变量纪律）；验证不过线 → revert 并在 `开发记录.md` 记录失败原因后删除分支；过线 → merge 回 main 并 push。
 - 一次只改一个变量；每次改动前在 `开发记录.md` 登记假设（目标文件/函数 + 预测机制 + 预期指标）。

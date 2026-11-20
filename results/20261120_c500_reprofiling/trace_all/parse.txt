@@ -1,0 +1,59 @@
+# events: 3158255
+# kernels=801859 cpu_ops=577404 cuda_api=472972
+
+# GPU kernel 总时间 28914.7 ms / trace span 238095.8 ms -> GPU busy 12.1%，idle 87.9%
+
+== 分类聚合 (ms, 占 kernel 时间比) ==
+  O_other                       13876.18 ms   48.0%
+  A_attention                    6350.78 ms   22.0%
+  E_epi_fused                    4645.31 ms   16.1%
+  Q_quant_bare                   1590.26 ms    5.5%
+  X_elementwise/copy             1557.21 ms    5.4%
+  N_norm                          628.56 ms    2.2%
+  S_sampling/softmax              266.43 ms    0.9%
+
+== Top-20 单 kernel (ms | count | avg µs) ==
+   7212.17 ms |   8216 |    877.8 µs | sweep
+   6009.58 ms |   1027 |   5851.6 µs | compute_global_hist_kernel
+   4454.43 ms |  42924 |    103.8 µs | void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 16, 16, 1, true, true, mctlass::bfloat16_
+   1636.64 ms | 115920 |     14.1 µs | void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMul
+   1590.26 ms | 173563 |      9.2 µs | _dynamic_per_token_quant_int8_bare_kernel
+   1133.36 ms |  39723 |     28.5 µs | void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMul
+    916.39 ms |   2772 |    330.6 µs | void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMul
+    783.07 ms |   1047 |    747.9 µs | _scatter_jit_function
+    625.70 ms |   1428 |    438.2 µs | void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, true, true, mctlass::bfloat16
+    437.79 ms |   2688 |    162.9 µs | void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMul
+    423.18 ms |  39438 |     10.7 µs | void flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<128, 16, 16, 1, true, true, mctlass::b
+    408.66 ms |   1302 |    313.9 µs | void flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 64, 64, 4, true, true, mctlass::bfloat16_
+    331.73 ms |  43134 |      7.7 µs | triton_red_fused_fused_add_rms_norm_2
+    325.75 ms |  43134 |      7.6 µs | triton_poi_fused_1
+    288.69 ms |  43134 |      6.7 µs | triton_red_fused_fused_add_rms_norm_0
+    244.74 ms |  42107 |      5.8 µs | triton_poi_fused_cat_3
+    233.65 ms |  43134 |      5.4 µs | void vllm::reshape_and_cache_flash_kernel<__maca_bfloat16, __maca_bfloat16, (vllm::Fp8KVCacheDataTyp
+    204.07 ms |   2688 |     75.9 µs | void mctlass::Kernel<mctlass::gemm::kernel::MacaGemmUniversal<mctlass::gemm::threadblock::MacaMmaMul
+    192.30 ms |  46074 |      4.2 µs | _copy_kernel_kernel_rank_3
+    189.80 ms |  42107 |      4.5 µs | triton_poi_fused_cat_4
+
+== GPU 空闲 gap 总计 209209.7 ms, top-8: ==
+  70417.71 ms @ t+84597.7ms
+  69815.55 ms @ t+162484.5ms
+  57224.01 ms @ t+19783.3ms
+    227.48 ms @ t+0.0ms
+     68.64 ms @ t+232706.8ms
+     52.35 ms @ t+276.8ms
+     39.57 ms @ t+155519.6ms
+     38.34 ms @ t+155236.0ms
+
+== w8a8/int_mm cpu_op 首输入形状直方图 (真实 M) ==
+
+== cuda api Top-10 (总 ms | count) ==
+  15996.41 ms |    2059 | mcEventSynchronize
+   1197.77 ms |   14533 | mcMemcpyAsync
+   1004.81 ms |   90429 | mcModuleLaunchKernel
+    363.80 ms |   25280 | mcLaunchKernel
+    287.85 ms |  255158 | mcPointerGetAttribute
+    121.63 ms |    1382 | mcGraphLaunch
+     94.21 ms |     166 | mcModuleLoadData
+     66.67 ms |   54111 | mcGetDeviceProperties
+     26.29 ms |       1 | mcDeviceSynchronize
+     19.31 ms |    6048 | mcStreamSynchronize

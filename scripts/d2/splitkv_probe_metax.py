@@ -33,7 +33,9 @@ def build_case(S, kv_len, seed=0):
     """MACA flash 口径数据（乱序页表）。closure 经模块属性取符号——hop 装载
     前后行为不同，装载后由 set_active 控制路由。"""
     g = torch.Generator(device=DEV).manual_seed(seed)
-    q = torch.randn(S, NH, HD, device=DEV, dtype=torch.bfloat16, generator=g)
+    # 4D [bs,1,NH,HD]：serve 经 reshape_query_for_spec_decod 的真实形态，
+    # 且现版 flash_attn 2.6.3+metax 仅接受 4D（3D 直接 RuntimeError）
+    q = torch.randn(S, 1, NH, HD, device=DEV, dtype=torch.bfloat16, generator=g)
     nb = triton.cdiv(kv_len, BLOCK) * S + 4
     kc = torch.randn(nb, BLOCK, NKV, HD, device=DEV, dtype=torch.bfloat16,
                      generator=g)
@@ -50,8 +52,8 @@ def build_case(S, kv_len, seed=0):
     def call():
         return _fa.flash_attn_with_kvcache(
             q=q, k_cache=kc, v_cache=vc, block_table=bt, cache_seqlens=su,
-            softmax_scale=HD ** -0.5, causal=True, window_size=None,
-            alibi_slopes=None, softcap=None, s_aux=None)
+            softmax_scale=HD ** -0.5, causal=True, window_size=(-1, -1),
+            alibi_slopes=None, softcap=0.0, s_aux=None)
 
     by = S * kv_len * 2 * NKV * HD * 2  # K+V 读字节
     return call, by

@@ -51,6 +51,11 @@ def _ensure_td_stub() -> None:
             return
 
         class _TensorDescriptorStub:
+            # triton 3.0 AST 扫描（jit.py visit_Call 的 is_triton_builtin）对
+            # 死代码分支里的调用也查 __module__ 前缀——伪造 triton.language
+            # 模块名让扫描通过；真被调用（USE_TD=True，沐曦不允许）仍 raise。
+            __module__ = "triton.language"
+
             def __call__(self, *args, **kwargs):
                 raise RuntimeError(
                     "tl.make_tensor_descriptor is not available on triton < 3.3; "
@@ -73,8 +78,17 @@ def _ensure_td_stub() -> None:
 
 def _route_decision_flash(kw) -> str | None:
     """flash_with_kvcache 口径的路由判定。返回 None=路由自研 kernel。只看
-    CPU 侧静态量（cache_seqlens 是 device 张量，绝不取 max——同 hop1 纪律）。"""
+    CPU 侧静态量（cache_seqlens 是 device 张量，绝不取 max——同 hop1 纪律）。
+    4D 适配（2026-11-20）：serve 经 reshape_query_for_spec_decod 传 4D
+    [bs,1,NH,HD]，且现版 flash_attn 2.6.3+metax 仅收 4D——q.ndim==4 且
+    shape[1]==1 归一为 3D 判定，否则按 ndim 拒绝。"""
     q = kw.get("q")
+    if isinstance(q, torch.Tensor) and q.ndim == 4:
+        if q.shape[1] != 1:
+            return f"q_len={q.shape[1]}>1"
+        q = q.squeeze(1)
+        kw = dict(kw)
+        kw["q"] = q
     k_cache = kw.get("k_cache")
     v_cache = kw.get("v_cache")
     cache_seqlens = kw.get("cache_seqlens")
@@ -178,8 +192,8 @@ def install() -> bool:
         return False
 
     _ensure_td_stub()
-    variant = max(0, min(_env_int("VLLM_FL_ATTN_SPLITKV_VARIANT", 1), 3))
-    debug = _env_int("VLLM_FL_ATTN_SPLITKV_DEBUG", 0) == 1
+    variant = max(0, min(_ask._env_int("VLLM_FL_ATTN_SPLITKV_VARIANT", 1), 3))
+    debug = _ask._env_int("VLLM_FL_ATTN_SPLITKV_DEBUG", 0) == 1
     _fallback_logged = False
 
     def _splitkv_flash_with_kvcache(q=None, k_cache=None, v_cache=None, *args,
@@ -198,12 +212,15 @@ def install() -> bool:
                 block_table = kw["block_table"]
                 # CPU 侧上界（block_table 列数 × block_size），避免 device 同步
                 _ask._CURRENT_MAX_KV[0] = block_table.shape[1] * k_cache.shape[1]
-                out = _get_out(q.shape[0], q.shape[1], q.shape[2], q.device)
+                qk = q.squeeze(1) if q.ndim == 4 else q   # 4D serve 形态归一
+                out = _get_out(qk.shape[0], qk.shape[1], qk.shape[2], q.device)
                 cu = _get_cu(kw["cache_seqlens"].shape[0], q.device)
                 _ask.splitkv_decode_attention(
-                    q, k_cache, v_cache, out, cu, kw["cache_seqlens"],
+                    qk, k_cache, v_cache, out, cu, kw["cache_seqlens"],
                     block_table, kw.get("softmax_scale"),
                     variant=var, use_td=False)
+                if q.ndim == 4:
+                    out = out.unsqueeze(1)
                 if debug:
                     logger.info(
                         "fl.attn-splitkv(metax): routed bs=%d kv<=%d split=%d "

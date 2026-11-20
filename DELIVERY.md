@@ -1,6 +1,6 @@
 # final-submition 双平台交付汇总
 
-2026-11-20，C500 在 `delivery-final-1119`（`ffd0daf`）之上集成四项融合。当前 C500 版本待测官方 4K、16K 和 105 题精度。下表为上一封板版本的官方结果，吞吐单位 tok/s。
+2026-11-20，C500 在 `delivery-final-1119`（`ffd0daf`）之上集成四项融合。当前 C500 版本待测官方 4K、16K 和 105 题精度。下表为上一封板版本的官方结果，吞吐单位 tok/s。（天数侧 11-19 封板，沐曦侧官方 bench/精度 11-19 23:20 完成，见文末「沐曦上版官方成绩」。）
 
 | 平台 | 已验收的默认优化 | 4K | 16K | 105 题精度 |
 |---|---|---:|---:|---:|
@@ -63,7 +63,7 @@ vllm serve /workspace/MiniCPM5-2B-w8a8-v2 \
   --max-model-len 131072
 ```
 
-## 11 月 19 日封板记录
+## 11 月 19 日封板记录（沐曦侧 1-4 ✅；⬜ 5 = 出包待办）
 
 1. ✅ `git merge feat/d4-metax-port`（`4eb72df` 入本分支；bedf8ca mctlassEx w8a8 +
    c948594 接线，保留默认开语义）
@@ -75,6 +75,22 @@ vllm serve /workspace/MiniCPM5-2B-w8a8-v2 \
    （Mean TTFT 未单独汇总，raw_runs CSV 在档可查）
 5. ⬜ 双平台源码合并 → 参赛队伍.zip（模板：FlagGems(v5.3.5 原样)/readme/report/
    vllm-plugin-FL）→ 提交平台 + 评审后 PR
+
+## 11 月 20 日融合收口（本分支最终形态）
+
+- 四项融合（F-a RoPE+cat / D13 norm+quant / A-H4 IR norm / F-c 分组直写）默认在
+  metax 启用：`VLLM_FL_FUSION_BUNDLE` 缺省 "1" 且仅 vendor==metax 生效，V150 走原
+  路由；`VLLM_FL_D13_M_FUSE_MAX` 缺省 2048（对齐 C500 动态编译图预热形状）。官方
+  serve 命令零附加 env。
+- 合入 `delivery/s2-final` 全部证据链（审视报告、双机任务板、D5-D13/TileLang 判决
+  文档、trace 与 CSV）及 B 机研究档案修复（metax hop 4D 路由、triton stub
+  `__module__`、闭包 `tl` 提升与 continue 替换）；修复均 env 门控默认关
+  （`VLLM_FL_ATTN_SPLITKV=0` 即 install() 直接返回），不在官方 serve 路径。
+- 合规审计（2026-11-20 19:2x）：`benchmarks/` 自 `delivery-final-1119` 锚点起零
+  改动；V150 侧无行为变化（vendor delta 仅上述惰性研究档案文件）；官方启动命令
+  与 4.3 节逐字一致（仅 `--model` 指向 w8a8 ckpt）；单测 10/10 绿
+  （`test_fusion_defaults.py` / `test_d13_pair.py`）。
+- 待办：官方全量 bench（4K/16K 各 4 轮丢首）+ 105 题精度（用户逐轮批准后执行）。
 
 ## 纪律红线（全程有效）
 
