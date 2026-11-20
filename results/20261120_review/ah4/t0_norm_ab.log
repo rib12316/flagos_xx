@@ -1,0 +1,40 @@
+INFO 11-20 11:39:32 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-20 11:39:32 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-20 11:39:32 [__init__.py:58] Loading plugin fl
+/opt/conda/lib/python3.12/site-packages/torch/library.py:381: UserWarning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: _C::cutlass_scaled_mm_supports_fp8(int cuda_device_capability) -> bool
+    registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+  dispatch key: CompositeImplicitAutograd
+  previous kernel: registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+       new kernel: registered at /dev/null:95 (Triggered internally at /workspace/framework/mcPytorch/aten/src/ATen/core/dispatch/OperatorEntry.cpp:218.)
+  self.m.impl(
+INFO Print the version information of mcoplib during compilation.
+
+Version info:Mcoplib_Version = '0.4.5'
+Build_Maca_Version = '3.7.0.37'
+GIT_BRANCH = 'HEAD'
+GIT_COMMIT = 'a9125e4'
+Vllm Op Version = 0.20.0
+SGlang Op Version  = 0.5.10 
+
+INFO Staring Check the current MACA version of the operating environment.
+
+INFO: Release major.minor matching,  successful:3.7. 
+
+INFO 11-20 11:40:00 [__init__.py:237] Platform plugin fl is activated
+/opt/conda/lib/python3.12/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/opt/conda/lib/python3.12/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+[2026-11-20 11:40:07] [INFO] [vllm_fl.dispatch.backends.vendor.metax.attn_splitkv_hop] fl.attn-splitkv(metax): VLLM_FL_ATTN_SPLITKV=0，保持 MACA flash
+# PROVENANCE t0_norm_ab: git=1755ba3 torch=2.8.0+metax3.7.0.7 vendor=metax cuda_alike=True
+# model caliber: /workspace/MiniCPM5-2B-w8a8-v2/config.json hidden=2048 eps=1e-06 layers=42 dtype=bfloat16
+# ir impls=['aiter', 'native', 'oink', 'vllm_c', 'xpu_kernels'] vllm_c.inplace=True
+# shape(MxK) | ArmA_us(中位) ArmB_us(中位) speedup | A_vs_ref: maxabs/maxrel/over | B_vs_ref同 | B_vs_A同 | guard
+# 容差口径: bf16 atol=0.001 rtol=0.016 (vllm ir DEFAULT_TOLERANCES)
+M=32    K=2048 | ArmA=    7.08us ArmB=    6.46us speedup= 1.10x | A_out 3.12e-02/7.81e-03/0 A_res 0.00e+00/0.00e+00/0 | B_out 3.12e-02/7.81e-03/0 B_res 0.00e+00/0.00e+00/0 | B_vs_A 0.00e+00/0.00e+00/0 res 0.00e+00/0.00e+00/0 | guard=True
+M=64    K=2048 | ArmA=    7.63us ArmB=    6.69us speedup= 1.14x | A_out 3.12e-02/7.81e-03/0 A_res 0.00e+00/0.00e+00/0 | B_out 3.12e-02/7.81e-03/0 B_res 0.00e+00/0.00e+00/0 | B_vs_A 0.00e+00/0.00e+00/0 res 0.00e+00/0.00e+00/0 | guard=True
+M=2048  K=2048 | ArmA=   39.07us ArmB=   31.48us speedup= 1.24x | A_out 6.25e-02/7.81e-03/0 A_res 0.00e+00/0.00e+00/0 | B_out 6.25e-02/7.81e-03/0 B_res 0.00e+00/0.00e+00/0 | B_vs_A 7.81e-03/7.30e-03/0 res 0.00e+00/0.00e+00/0 | guard=True
+# 判读：speedup 是 ArmA/ArmB（>1 = ArmB 快）。判活门：M∈{32,64} 均 ≥1.10×。
+# serve 投影（粗，孤立核口径）：decode 档 speedup × trace 0.60ms/步 norm 合计 = 每步省时上限；e2e 以 T1 为准。

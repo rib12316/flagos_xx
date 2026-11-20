@@ -1,0 +1,63 @@
+INFO 11-20 16:01:35 [__init__.py:44] Available plugins for group vllm.platform_plugins:
+INFO 11-20 16:01:35 [__init__.py:46] - fl -> vllm_fl:register
+INFO 11-20 16:01:35 [__init__.py:58] Loading plugin fl
+/opt/conda/lib/python3.12/site-packages/torch/library.py:381: UserWarning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: _C::cutlass_scaled_mm_supports_fp8(int cuda_device_capability) -> bool
+    registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+  dispatch key: CompositeImplicitAutograd
+  previous kernel: registered at /tmp/build-via-sdist-_ouj1d45/mcoplib-0.4.5+maca3.7.0.37.torch2.8/op/vllm/torch_bindings.cpp:26
+       new kernel: registered at /dev/null:95 (Triggered internally at /workspace/framework/mcPytorch/aten/src/ATen/core/dispatch/OperatorEntry.cpp:218.)
+  self.m.impl(
+INFO Print the version information of mcoplib during compilation.
+
+Version info:Mcoplib_Version = '0.4.5'
+Build_Maca_Version = '3.7.0.37'
+GIT_BRANCH = 'HEAD'
+GIT_COMMIT = 'a9125e4'
+Vllm Op Version = 0.20.0
+SGlang Op Version  = 0.5.10 
+
+INFO Staring Check the current MACA version of the operating environment.
+
+INFO: Release major.minor matching,  successful:3.7. 
+
+INFO 11-20 16:01:38 [__init__.py:237] Platform plugin fl is activated
+/opt/conda/lib/python3.12/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/opt/conda/lib/python3.12/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+Failed to import maca patches: cannot import name 'Attention' from partially initialized module 'vllm.model_executor.layers.attention' (most likely due to a circular import) (/opt/conda/lib/python3.12/site-packages/vllm/model_executor/layers/attention/__init__.py)
+Failed to import maca patches: cannot import name 'MMEncoderAttention' from partially initialized module 'vllm.model_executor.layers.attention' (most likely due to a circular import) (/opt/conda/lib/python3.12/site-packages/vllm/model_executor/layers/attention/__init__.py)
+[2026-11-20 16:01:42] [INFO] [vllm_fl.dispatch.backends.vendor.metax.attn_splitkv_hop] fl.attn-splitkv(metax): VLLM_FL_ATTN_SPLITKV=0，保持 MACA flash
+D9 0231c70 | torch 2.8.0+metax3.7.0.7 | M=64
+K 2048 repeat 1 bare_us 7.68
+  kloop 1024 bitwise True us 8.973 speedup 0.856
+  kloop 2048 bitwise True us 7.821 speedup 0.982
+  blocked 2 2048 bitwise True us 10.317 speedup 0.744
+  blocked 4 2048 bitwise True us 65.958 speedup 0.116
+  blocked 4 1024 bitwise True us 13.85 speedup 0.555
+  blocked 8 1024 bitwise True us 100.979 speedup 0.076
+K 2048 repeat 2 bare_us 7.68
+  kloop 1024 bitwise True us 8.986 speedup 0.855
+  kloop 2048 bitwise True us 8.064 speedup 0.952
+  blocked 2 2048 bitwise True us 10.355 speedup 0.742
+  blocked 4 2048 bitwise True us 65.702 speedup 0.117
+  blocked 4 1024 bitwise True us 14.182 speedup 0.542
+  blocked 8 1024 bitwise True us 101.338 speedup 0.076
+K 12288 repeat 1 bare_us 17.856
+  kloop 1024 bitwise True us 32.64 speedup 0.547
+  kloop 2048 bitwise True us 24.435 speedup 0.731
+  kloop 4096 bitwise True us 16.768 speedup 1.065
+  blocked 2 2048 bitwise True us 37.376 speedup 0.478
+  blocked 4 2048 bitwise True us 300.045 speedup 0.06
+  blocked 4 1024 bitwise True us 64.179 speedup 0.278
+  blocked 8 1024 bitwise True us 591.936 speedup 0.03
+K 12288 repeat 2 bare_us 17.766
+  kloop 1024 bitwise True us 32.563 speedup 0.546
+  kloop 2048 bitwise True us 24.397 speedup 0.728
+  kloop 4096 bitwise True us 16.666 speedup 1.066
+  blocked 2 2048 bitwise True us 37.376 speedup 0.475
+  blocked 4 2048 bitwise True us 299.008 speedup 0.059
+  blocked 4 1024 bitwise True us 64.102 speedup 0.277
+  blocked 8 1024 bitwise True us 590.246 speedup 0.03
