@@ -259,24 +259,33 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
 
     @property
     def pattern(self):
-        rope_matcher = self.rope_matcher
+        """head-shaped rope：**不含** forward_static 末尾的 reshape 回平铺。
+
+        serve 探针实证（15:53，pid=380845）：post-grad 图里 rope 段为
+          reshape(q,[T,-1,128]) → split(64) → mul/sub/add → cat[T,NQ,D]
+        且 cat **直接出图**（forward_static 末尾的 reshape(cat,[T,2048]) 被
+        折叠掉，cat 与 [T,2048] 同内存）。若 pattern 走 forward_static，
+        就会多出一个末尾 reshape → 与真实图失配。故这里直接调
+        ApplyRotaryEmb.forward_static（只做旋转、无末尾 reshape）。
+        """
         q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
         num_q_heads, num_kv_heads = self.num_q_heads, self.num_kv_heads
         head_size = self.head_size
-        flat = self.flat_outputs
+        is_neox = self.is_neox
 
         def pattern(qkv, positions, cos_sin_cache):
-            # v 必须绑定并作为输出（matcher 要求内部节点 users 数与真实图一致：
-            # 真实 split_with_sizes 的第三个 getitem 喂下游 v view，缺它失配）
-            q, k, v = qkv.split([q_size, k_size, v_size], dim=-1)
-            q, k = rope_matcher(positions, q, k, cos_sin_cache)
-            if flat:
-                return q, k, v
-            return (
-                q.view(-1, num_q_heads, head_size),
-                k.view(-1, num_kv_heads, head_size),
-                v.view(-1, num_kv_heads, head_size),
+            from vllm.model_executor.layers.rotary_embedding.common import (
+                ApplyRotaryEmb,
             )
+
+            q, k, v = qkv.split([q_size, k_size, v_size], dim=-1)
+            cos_sin = cos_sin_cache.index_select(0, positions)
+            cos, sin = cos_sin.chunk(2, dim=-1)
+            q3 = q.view(-1, num_q_heads, head_size)
+            k3 = k.view(-1, num_kv_heads, head_size)
+            q3 = ApplyRotaryEmb.forward_static(q3, cos, sin, is_neox)
+            k3 = ApplyRotaryEmb.forward_static(k3, cos, sin, is_neox)
+            return q3, k3, v.view(-1, num_kv_heads, head_size)
 
         return pattern
 
@@ -285,10 +294,10 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
         num_q_heads, num_kv_heads = self.num_q_heads, self.num_kv_heads
         head_size = self.head_size
         q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
-        flat = self.flat_outputs
 
         def replacement(qkv, positions, cos_sin_cache):
             _, _, v = qkv.split([q_size, k_size, v_size], dim=-1)
+            # 融合 op 输出即 [T,NQ,D]/[T,NKV,D] 连续——与 pattern 输出同形同 layout
             q, k = FUSED_OP(
                 qkv,
                 positions,
@@ -297,9 +306,6 @@ class FLRopeQKCatPattern(VllmPatternReplacement):
                 num_kv_heads,
                 head_size,
             )
-            if flat:
-                # [T,NQ,D] 连续 → view 成 [T,Q_SIZE]，与 pattern 输出同形同 stride
-                return q.view(-1, q_size), k.view(-1, k_size), v
             return q, k, v.view(-1, num_kv_heads, head_size)
 
         return replacement
