@@ -1,0 +1,54 @@
+# trace: /data/flagos_wt/results/20261120_c500_reprofiling/trace_all/rank0.1795110863960817196.pt.trace.json.gz
+loading json (pure CPU) ...
+# events: 3158255, trace span 275.7s
+
+== [1] cuda_runtime API 全量表 (count | host 总时长) ==
+      2059     15996.4ms  mcEventSynchronize
+     14533      1197.8ms  mcMemcpyAsync
+     90429      1004.8ms  mcModuleLaunchKernel
+     25280       363.8ms  mcLaunchKernel
+    255158       287.8ms  mcPointerGetAttribute
+      1382       121.6ms  mcGraphLaunch
+       166        94.2ms  mcModuleLoadData
+     54111        66.7ms  mcGetDeviceProperties
+         1        26.3ms  mcDeviceSynchronize
+      6048        19.3ms  mcStreamSynchronize
+      2060         8.2ms  mcEventRecord
+      2093         6.7ms  mcEventRecordWithFlags
+      2730         5.7ms  mcFuncSetAttribute
+      7583         4.9ms  mcStreamIsCapturing
+== [1b] gpu_memcpy 方向表 ==
+     10482  Memcpy HtoD (Pinned -> Device)
+      3024  Memcpy DtoH (Device -> Pageable)
+      1027  Memcpy DtoH (Device -> Pinned)
+
+# decode 步锚点 (compute_global_hist_kernel): 1027
+# decode 活动段: 4 段 [(38.4, 19.0), (114.7, 7.5), (192.7, 7.4), (270.0, 5.7)]
+
+== [2] 稳态 decode 重放 span: 'execute_new_0_cached_32' n=887 host dur p50=3.67ms ==
+
+== [3] 稳态每步计数（诚实门输入）==
+  mcStreamSynchronize    in-span   166 =  0.19/step  in-span host 时长合计 0.561ms (p50 3.2us)
+  mcEventSynchronize     in-span   758 =  0.85/step  in-span host 时长合计 1.062ms (p50 1.3us)
+  mcDeviceSynchronize    in-span     0 =  0.00/step  in-span host 时长合计 0.000ms (p50 0.0us)
+  D2H pageable           in-span    83 =  0.09/step
+  D2H pinned             in-span   631 =  0.71/step
+  aten::item             in-span  2669 =  3.01/step  全 trace item host 时长 p50=1.3us p99=5.3us (CPU 张量读，非 GPU 同步)
+
+** 诚实门: 稳态每步同步类 = 1.04 < 2 → 负判决（host≈0） **
+
+== [4] mcEventSynchronize 时长分解 ==
+  span 内: n=758 总 1.1ms p50 1.3us（no-op）
+  span 外: n=1301 总 15995.4ms p90 18.28ms（async 输出/输入 prep join，等待 GPU 完成，GPU-bound by design）
+  落点: GPU busy 秒(>50%)内 n=1864 阻塞 15.57s | 低 busy 秒 n=195 阻塞 0.42s → 长等待与 kernel 忙共现（已重叠）
+
+== [5] 稳态窗口 [115.5s, 122.0s] n=244 步: kernel busy 95.6% ==
+  步间气泡（步 N 末 kernel → 步 N+1 首 kernel）: p50=2.8us p90=2.8us max=3.1us → async 流水无 host 气泡
+  步内 gap>=50us: n=793 总 111ms = 0.45ms/步（eager 采样尾 host-launch 缝隙）
+     244 次 |   64.2ms | _to_copy_func_kernel_rank_1 -> fill_scalar_func_kernel_rank_1
+     228 次 |   12.4ms | fill_scalar_func_kernel_rank_1 -> _index_jit_function
+     212 次 |   24.2ms | triton_red_fused_fused_add_rms_norm_2 -> _index_jit_function
+      93 次 |    8.4ms | sub_func_tensor_scalar_kernel_rank_1 -> triton_red_fused__to_copy_embedding_rms_
+      14 次 |    1.3ms | sub_func_tensor_scalar_kernel_rank_1 -> void flash_fwd_splitkv_combine_kernel
+
+== [6] H2D(稳态) 5.2/步 722KiB/步 （pinned 异步，静态 pinned buffer 已在位）==
