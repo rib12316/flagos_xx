@@ -28,6 +28,10 @@ fl_vllm_environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # 准入 watermark 覆盖（H7/H1：消灭容量钉死期的周期性抢占）
     "VLLM_FL_WATERMARK": lambda: os.environ.get("VLLM_FL_WATERMARK", ""),
+    # ---- F-a rope+cat 融合（feat/fa-rope-cat-fusion）----
+    # rope(Q)+rope(K) 单核 compile pass 注入门（默认开；"0"/"false" 完全不注入）
+    "VLLM_FL_FA_ROPECAT": lambda: os.environ.get("VLLM_FL_FA_ROPECAT", "1")
+    not in ("0", "false", "False"),
 }
 
 
