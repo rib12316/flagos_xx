@@ -28,6 +28,15 @@ fl_vllm_environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # 准入 watermark 覆盖（H7/H1：消灭容量钉死期的周期性抢占）
     "VLLM_FL_WATERMARK": lambda: os.environ.get("VLLM_FL_WATERMARK", ""),
+    # ---- D13 norm+quant 融合接线（§3.5 装载期静态配对，详见
+    # vllm_fl/quantization/w8a8/d13_norm_quant.py 头注）----
+    # 总门："0" = 模块图零改动，完整回退 stock 两步链（一键回退）
+    "VLLM_FL_D13_NORM_QUANT": lambda: os.environ.get(
+        "VLLM_FL_D13_NORM_QUANT", "1") != "0",
+    # 融合启用的 M 上限（decode-only 路由；未设 = 取
+    # compilation_config.max_cudagraph_capture_size = min(max_num_seqs*2,512)）
+    "VLLM_FL_D13_M_FUSE_MAX": lambda: os.environ.get(
+        "VLLM_FL_D13_M_FUSE_MAX", ""),
 }
 
 

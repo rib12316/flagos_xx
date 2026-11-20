@@ -34,6 +34,27 @@ FLAGGEMS_W8A8_LINEAR_OP = "w8a8_dynamic_per_token_linear"
 _dynamic_per_token_quant_int8 = CachedOp("dynamic_per_token_quant_int8")
 _w8a8_scaled_mm = CachedOp(FLAGGEMS_W8A8_LINEAR_OP)
 
+# D13 §3.5：配对标志的类级默认（False）。apply_weights 里必须直读属性——
+# getattr(x, name, default) 在 dynamo fullgraph 下遇到 nn.Module 缺失属性会
+# 内联 __getattr__ 并抛 AttributeError（EngineCore 启动失败实证）；类级默认
+# 使属性在任何 linear（含 lm_head 的 ParallelLMHead 分支）上恒可解析，env
+# 门关闭/离线直调同样安全。配对实例在装载期以实例属性覆盖为 True
+# （d13_norm_quant._install_pair）。
+try:
+    from vllm.model_executor.layers.linear import LinearBase as _LinearBase
+
+    _LinearBase._fl_expects_prequant = False
+except Exception:  # pragma: no cover
+    pass
+try:
+    from vllm.model_executor.layers.vocab_parallel_embedding import (
+        ParallelLMHead as _ParallelLMHead,
+    )
+
+    _ParallelLMHead._fl_expects_prequant = False
+except Exception:  # pragma: no cover
+    pass
+
 
 class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
     """Use the dispatched W8A8 scaled-mm with the vLLM dynamic-W8A8 contract.
@@ -113,6 +134,25 @@ class FLW8A8DynamicLinearKernel(Int8ScaledMMLinearKernel):
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         weight, weight_scale, _, _, _ = self._get_layer_params(layer)
+        # D13 §3.5 装载期静态配对（d13_norm_quant.py）：配对 norm 已在融合
+        # kernel 内完成 per-token int8 量化，激活以 int8 流入——跳过量化，scale
+        # 从配对 norm 的侧信道 buffer 取前 M 行。判别符用 x.dtype==int8（非
+        # 仅 layer 标志）：同一 linear 在 M>阈值 的 shape 下仍收 bf16（路由分支
+        # 在 norm 侧），dtype 是 dynamo 合法 guard、每 shape 固定 → graph 安全。
+        # 属性须直读（类级默认见模块头注释）——getattr-default 在 dynamo
+        # fullgraph 下不可用。
+        if layer._fl_expects_prequant and x.dtype == torch.int8:
+            x_q = x
+            x_scale = layer._fl_prequant_norm._fl_d13_scale[: x.shape[0]]
+            output = _w8a8_scaled_mm(
+                x_q,
+                weight,
+                x_scale,
+                weight_scale,
+                bias=bias,
+                out_dtype=torch.bfloat16,
+            )
+            return output.reshape(x.shape[0], weight_scale.numel())
         original_shape = x.shape
         x_2d = x.reshape(-1, original_shape[-1]).contiguous()
         x_q, x_scale = _dynamic_per_token_quant_int8(x_2d)
