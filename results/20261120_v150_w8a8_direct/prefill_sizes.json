@@ -1,0 +1,2405 @@
+{
+  "torch": "2.10.0",
+  "triton": "3.6.0",
+  "ixformer": "0.7.0+corex.4.5.0",
+  "gpu": "Iluvatar BI-V150",
+  "results": [
+    {
+      "projection": "gate_up",
+      "M": 256,
+      "K": 2048,
+      "N": 12288,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3145728
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3145728
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3145728
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 89.24712500000001,
+          "rounds_us": [
+            747.1757083333333,
+            89.3725,
+            87.94883333333334,
+            90.16608333333333,
+            87.63945833333334,
+            89.12175
+          ]
+        },
+        "ix_NN": {
+          "us": 66.48391666666667,
+          "rounds_us": [
+            66.57529166666667,
+            66.65425,
+            66.53079166666667,
+            66.43704166666667,
+            66.346625,
+            66.36958333333334
+          ]
+        },
+        "ix_TN": {
+          "us": 72.55991666666667,
+          "rounds_us": [
+            72.69133333333333,
+            72.323625,
+            72.844625,
+            73.196,
+            72.4285,
+            72.42295833333333
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3145728
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3145728
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3145728
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 157.94633333333334,
+          "rounds_us": [
+            147.82091666666668,
+            145.61991666666665,
+            979.379,
+            184.52458333333334,
+            168.07175,
+            147.06254166666668
+          ]
+        },
+        "ix_NN": {
+          "us": 89.3756875,
+          "rounds_us": [
+            89.59004166666666,
+            89.16133333333333,
+            89.06279166666667,
+            92.97016666666667,
+            91.61041666666667,
+            78.31241666666666
+          ]
+        },
+        "ix_TN": {
+          "us": 97.2956875,
+          "rounds_us": [
+            94.68958333333333,
+            94.005625,
+            98.98366666666666,
+            99.7155,
+            108.59575,
+            95.60770833333333
+          ]
+        }
+      },
+      "kernel_trace": {
+        "current": [
+          "_w8a8_fused_gemm_kernel"
+        ],
+        "ix_NN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, true, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, false, 4u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ],
+        "ix_TN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, false, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, false, 4u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ]
+      }
+    },
+    {
+      "projection": "gate_up",
+      "M": 257,
+      "K": 2048,
+      "N": 12288,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3158016
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3158016
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3158016
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 210.69145833333334,
+          "rounds_us": [
+            210.60825,
+            210.48816666666667,
+            210.81,
+            210.77466666666666,
+            210.886875,
+            210.39266666666666
+          ]
+        },
+        "ix_NN": {
+          "us": 74.02208333333334,
+          "rounds_us": [
+            73.91445833333333,
+            74.06608333333334,
+            73.80104166666666,
+            73.97808333333333,
+            74.77966666666667,
+            74.15329166666666
+          ]
+        },
+        "ix_TN": {
+          "us": 85.48820833333333,
+          "rounds_us": [
+            84.22204166666667,
+            86.00745833333333,
+            85.52358333333333,
+            85.42808333333333,
+            85.993875,
+            85.45283333333333
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3158016
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3158016
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 3158016
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 270.76222916666666,
+          "rounds_us": [
+            270.34383333333335,
+            270.9665,
+            270.360125,
+            300.8625,
+            275.568625,
+            270.5579583333333
+          ]
+        },
+        "ix_NN": {
+          "us": 103.09654166666667,
+          "rounds_us": [
+            103.10766666666666,
+            103.08541666666666,
+            102.8195,
+            106.70254166666666,
+            105.35520833333334,
+            102.66954166666666
+          ]
+        },
+        "ix_TN": {
+          "us": 115.36508333333333,
+          "rounds_us": [
+            113.75258333333333,
+            114.13295833333333,
+            710.2353333333333,
+            116.59720833333333,
+            127.82883333333334,
+            112.87125
+          ]
+        }
+      },
+      "kernel_trace": {
+        "current": [
+          "void Gemm_tcu_mr_kernel::gemm_tcu_h<128u, 256u, 64u, 32u, 64u, 2u, (ixblasTrans_t)1, (ixblasTrans_t)1, (ixblasTCUGEMMCategory_t)0, (ixmma::MMEdgeCheckMode)0, (ixblasGEMMBoundary_t)2, (ixblasLtEpilogue_t)1, false, int, (ixblasLtMatmulMatrixScale_t)1002, (ixblasLtMatmulMatrixScale_t)1002, (ixblasLtMatmulMatrixScale_t)1002, false, false, 4u, 4u, false, int, int, int, signed char, signed char>(int*, int*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, int, long, long, long, long, long, long, ixblasGEMMBatchMode_t, int, void*, void*, void*, unsigned int)",
+          "_w8a8_int32_epilogue_kernel"
+        ],
+        "ix_NN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<320u, 256u, 64u, 80u, 64u, true, true, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, false, 3u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ],
+        "ix_TN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<320u, 256u, 64u, 80u, 64u, true, false, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, false, 3u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ]
+      }
+    },
+    {
+      "projection": "gate_up",
+      "M": 512,
+      "K": 2048,
+      "N": 12288,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 6291456
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 6291456
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 6291456
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 130.06933333333333,
+          "rounds_us": [
+            130.057875,
+            130.08079166666667,
+            131.51333333333332,
+            130.61175,
+            129.42304166666668,
+            129.79591666666667
+          ]
+        },
+        "ix_NN": {
+          "us": 130.32441666666665,
+          "rounds_us": [
+            130.4715,
+            130.61975,
+            130.74408333333332,
+            130.17733333333334,
+            129.346875,
+            128.934375
+          ]
+        },
+        "ix_TN": {
+          "us": 130.96612499999998,
+          "rounds_us": [
+            131.163875,
+            3088.4422916666667,
+            131.524125,
+            130.768375,
+            130.53958333333333,
+            130.26070833333333
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 6291456
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 6291456
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 6291456
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 197.28662500000002,
+          "rounds_us": [
+            193.76675,
+            254.81570833333333,
+            200.8065,
+            192.15041666666667,
+            192.41275,
+            1443.5555833333333
+          ]
+        },
+        "ix_NN": {
+          "us": 164.1184166666667,
+          "rounds_us": [
+            1420.360125,
+            172.60204166666668,
+            172.945125,
+            155.63479166666667,
+            155.32825,
+            155.09941666666666
+          ]
+        },
+        "ix_TN": {
+          "us": 157.11793749999998,
+          "rounds_us": [
+            147.43804166666666,
+            177.29475,
+            160.4665,
+            157.32458333333332,
+            156.91129166666667,
+            156.768375
+          ]
+        }
+      },
+      "kernel_trace": {
+        "current": [
+          "_w8a8_fused_gemm_kernel"
+        ],
+        "ix_NN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, true, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, true, 4u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ],
+        "ix_TN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, false, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, true, 4u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ]
+      }
+    },
+    {
+      "projection": "gate_up",
+      "M": 1024,
+      "K": 2048,
+      "N": 12288,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 12582912
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 12582912
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 12582912
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 239.8450625,
+          "rounds_us": [
+            240.35204166666668,
+            239.33808333333334,
+            240.40241666666665,
+            239.31904166666666,
+            239.02554166666667,
+            241.13008333333335
+          ]
+        },
+        "ix_NN": {
+          "us": 247.118625,
+          "rounds_us": [
+            247.05854166666666,
+            247.12316666666666,
+            247.24720833333333,
+            247.11408333333333,
+            246.481625,
+            1073.4754166666667
+          ]
+        },
+        "ix_TN": {
+          "us": 221.98520833333333,
+          "rounds_us": [
+            221.41608333333335,
+            2379.7721666666666,
+            222.149625,
+            221.563875,
+            221.94383333333334,
+            222.02658333333332
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 12582912
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 12582912
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 12582912
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 307.86379166666666,
+          "rounds_us": [
+            312.589125,
+            302.5294583333333,
+            366.98704166666664,
+            302.2252916666667,
+            303.13845833333335,
+            366.48354166666667
+          ]
+        },
+        "ix_NN": {
+          "us": 284.329125,
+          "rounds_us": [
+            301.568375,
+            272.99008333333336,
+            322.5007083333333,
+            281.752875,
+            271.62466666666666,
+            286.905375
+          ]
+        },
+        "ix_TN": {
+          "us": 252.29704166666664,
+          "rounds_us": [
+            247.97441666666666,
+            1784.6688333333334,
+            256.61966666666666,
+            245.42829166666667,
+            245.729,
+            1131.5491666666667
+          ]
+        }
+      },
+      "kernel_trace": {
+        "current": [
+          "_w8a8_fused_gemm_kernel"
+        ],
+        "ix_NN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, true, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, true, 2u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ],
+        "ix_TN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, false, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, true, 2u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ]
+      }
+    },
+    {
+      "projection": "gate_up",
+      "M": 2047,
+      "K": 2048,
+      "N": 12288,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 25153536
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 25153536
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 25153536
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 1136.00025,
+          "rounds_us": [
+            843.0630833333333,
+            1590.219375,
+            2411.7862083333334,
+            842.609375,
+            842.7400416666667,
+            1428.9374166666666
+          ]
+        },
+        "ix_NN": {
+          "us": 477.2940625,
+          "rounds_us": [
+            478.05825,
+            478.12266666666665,
+            476.74266666666665,
+            476.1835,
+            477.84545833333334,
+            475.88933333333335
+          ]
+        },
+        "ix_TN": {
+          "us": 424.6168541666667,
+          "rounds_us": [
+            422.81345833333336,
+            424.27633333333335,
+            425.533375,
+            424.957375,
+            1555.8408333333334,
+            423.59254166666665
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 25153536
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 25153536
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 25153536
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 950.1374791666667,
+          "rounds_us": [
+            897.2034583333333,
+            927.6997083333333,
+            984.854375,
+            972.57525,
+            2092.53475,
+            896.9182083333334
+          ]
+        },
+        "ix_NN": {
+          "us": 1070.6392916666666,
+          "rounds_us": [
+            1609.5311666666666,
+            505.10795833333333,
+            2193.243916666667,
+            2119.6522083333334,
+            531.7474166666667,
+            510.6402083333333
+          ]
+        },
+        "ix_TN": {
+          "us": 456.26043749999997,
+          "rounds_us": [
+            460.5912916666667,
+            446.46183333333335,
+            451.9295833333333,
+            506.306375,
+            449.45545833333335,
+            484.34945833333336
+          ]
+        }
+      },
+      "kernel_trace": {
+        "current": [
+          "void Gemm_tcu_mr_kernel::gemm_tcu_h<256u, 256u, 64u, 64u, 64u, 2u, (ixblasTrans_t)1, (ixblasTrans_t)1, (ixblasTCUGEMMCategory_t)0, (ixmma::MMEdgeCheckMode)0, (ixblasGEMMBoundary_t)2, (ixblasLtEpilogue_t)1, false, int, (ixblasLtMatmulMatrixScale_t)1002, (ixblasLtMatmulMatrixScale_t)1002, (ixblasLtMatmulMatrixScale_t)1002, false, true, 4u, 4u, false, int, int, int, signed char, signed char>(int*, int*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, int, long, long, long, long, long, long, ixblasGEMMBatchMode_t, int, void*, void*, void*, unsigned int)",
+          "_w8a8_int32_epilogue_kernel"
+        ],
+        "ix_NN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, true, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, true, 2u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ],
+        "ix_TN": [
+          "void cuinfer::impl::kernel::mr_fast_gemm_f_f_i8_i8_h_tcuh<256u, 256u, 64u, 64u, 64u, true, false, (cuinfer::impl::kernel::cuinferGEMMBoundary_t)1, false, (cuinferGEMMCustomOption_t)0, false, true, 2u, 4u, 4u, __ix_bfloat16, signed char, signed char>(__ix_bfloat16*, signed char const*, signed char const*, int, int, int, int, int, int, int, int, int, float, float, void const*, void const*, void const*, void const*, bool)"
+        ]
+      }
+    },
+    {
+      "projection": "qkv",
+      "M": 256,
+      "K": 2048,
+      "N": 2560,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 655360
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 655360
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 655360
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 26.466895833333332,
+          "rounds_us": [
+            27.134833333333333,
+            26.53275,
+            26.522541666666665,
+            26.41125,
+            26.112666666666666,
+            25.75075
+          ]
+        },
+        "ix_NN": {
+          "us": 24.019312499999998,
+          "rounds_us": [
+            24.043625,
+            24.300083333333333,
+            24.056166666666666,
+            23.995,
+            23.50604166666667,
+            23.964083333333335
+          ]
+        },
+        "ix_TN": {
+          "us": 23.775020833333336,
+          "rounds_us": [
+            23.714125,
+            24.375541666666667,
+            23.859875,
+            23.746916666666667,
+            23.803125,
+            23.233291666666666
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 655360
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 655360
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 655360
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 150.186375,
+          "rounds_us": [
+            229.978125,
+            174.27745833333333,
+            126.09529166666667,
+            93.38045833333334,
+            92.81529166666667,
+            230.67270833333333
+          ]
+        },
+        "ix_NN": {
+          "us": 73.38697916666666,
+          "rounds_us": [
+            111.54554166666667,
+            78.97133333333333,
+            67.802625,
+            67.29479166666667,
+            52.76433333333333,
+            2573.759666666667
+          ]
+        },
+        "ix_TN": {
+          "us": 66.91310416666667,
+          "rounds_us": [
+            87.76483333333333,
+            83.01516666666667,
+            67.19225,
+            66.63395833333334,
+            52.387625,
+            52.08925
+          ]
+        }
+      }
+    },
+    {
+      "projection": "qkv",
+      "M": 257,
+      "K": 2048,
+      "N": 2560,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 657920
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 657920
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 657920
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 33.98839583333333,
+          "rounds_us": [
+            33.959875,
+            33.441291666666665,
+            33.440041666666666,
+            34.14579166666667,
+            34.04591666666666,
+            34.01691666666667
+          ]
+        },
+        "ix_NN": {
+          "us": 25.587562499999997,
+          "rounds_us": [
+            25.405666666666665,
+            25.313875,
+            25.359583333333333,
+            27.305791666666668,
+            25.87425,
+            25.769458333333333
+          ]
+        },
+        "ix_TN": {
+          "us": 25.725291666666664,
+          "rounds_us": [
+            25.508416666666665,
+            25.441916666666668,
+            25.428791666666665,
+            27.047333333333334,
+            26.029291666666666,
+            25.942166666666665
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 657920
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 657920
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 657920
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 111.67677083333334,
+          "rounds_us": [
+            191.53004166666668,
+            129.22975,
+            92.78175,
+            93.21808333333334,
+            94.12379166666666,
+            1945.746625
+          ]
+        },
+        "ix_NN": {
+          "us": 59.83977083333333,
+          "rounds_us": [
+            90.453375,
+            67.0615,
+            67.09675,
+            52.253125,
+            52.61804166666667,
+            52.196958333333335
+          ]
+        },
+        "ix_TN": {
+          "us": 53.16735416666667,
+          "rounds_us": [
+            67.708375,
+            67.44041666666666,
+            53.142541666666666,
+            52.428375,
+            52.522375,
+            53.192166666666665
+          ]
+        }
+      }
+    },
+    {
+      "projection": "qkv",
+      "M": 512,
+      "K": 2048,
+      "N": 2560,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1310720
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1310720
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1310720
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 40.059354166666665,
+          "rounds_us": [
+            40.171,
+            40.061625,
+            40.06458333333333,
+            40.05708333333333,
+            39.7085,
+            38.75183333333333
+          ]
+        },
+        "ix_NN": {
+          "us": 43.862812500000004,
+          "rounds_us": [
+            3722.5286666666666,
+            43.857166666666664,
+            43.93275,
+            43.868458333333336,
+            43.378166666666665,
+            43.345333333333336
+          ]
+        },
+        "ix_TN": {
+          "us": 43.53754166666667,
+          "rounds_us": [
+            44.07208333333333,
+            43.72875,
+            43.53366666666667,
+            43.54141666666667,
+            42.918125,
+            43.012125
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1310720
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1310720
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1310720
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 122.85410416666667,
+          "rounds_us": [
+            112.389,
+            100.48633333333333,
+            100.40991666666666,
+            242.30583333333334,
+            196.20804166666667,
+            133.31920833333334
+          ]
+        },
+        "ix_NN": {
+          "us": 80.43464583333333,
+          "rounds_us": [
+            72.87175,
+            70.02291666666666,
+            70.09545833333334,
+            120.61666666666666,
+            102.621,
+            87.99754166666666
+          ]
+        },
+        "ix_TN": {
+          "us": 113.55329166666667,
+          "rounds_us": [
+            72.09158333333333,
+            72.02108333333334,
+            2064.2924583333333,
+            125.15016666666666,
+            130.883625,
+            101.95641666666667
+          ]
+        }
+      }
+    },
+    {
+      "projection": "qkv",
+      "M": 1024,
+      "K": 2048,
+      "N": 2560,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2621440
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2621440
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2621440
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 61.6833125,
+          "rounds_us": [
+            61.88979166666667,
+            62.899875,
+            61.282,
+            61.677375,
+            61.68925,
+            60.947291666666665
+          ]
+        },
+        "ix_NN": {
+          "us": 64.43064583333333,
+          "rounds_us": [
+            64.14975,
+            64.71154166666666,
+            63.643625,
+            3040.639166666667,
+            65.63479166666667,
+            63.51316666666666
+          ]
+        },
+        "ix_TN": {
+          "us": 60.28514583333333,
+          "rounds_us": [
+            60.00870833333333,
+            59.86995833333334,
+            58.91075,
+            60.56158333333333,
+            61.117041666666665,
+            60.72045833333333
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2621440
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2621440
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2621440
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 130.98883333333333,
+          "rounds_us": [
+            161.95229166666667,
+            131.52454166666666,
+            130.39666666666668,
+            125.43870833333334,
+            130.453125,
+            164.019375
+          ]
+        },
+        "ix_NN": {
+          "us": 93.81329166666667,
+          "rounds_us": [
+            89.55579166666666,
+            93.60904166666667,
+            93.267125,
+            94.01754166666667,
+            1053.872,
+            108.749875
+          ]
+        },
+        "ix_TN": {
+          "us": 93.1606875,
+          "rounds_us": [
+            93.34429166666666,
+            94.11158333333333,
+            92.97708333333334,
+            93.68633333333334,
+            92.90129166666667,
+            90.32625
+          ]
+        }
+      }
+    },
+    {
+      "projection": "qkv",
+      "M": 2047,
+      "K": 2048,
+      "N": 2560,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 5240320
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 5240320
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 5240320
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 173.91195833333333,
+          "rounds_us": [
+            3958.298875,
+            174.925875,
+            172.3675,
+            174.707125,
+            173.11679166666667,
+            173.10416666666666
+          ]
+        },
+        "ix_NN": {
+          "us": 101.535,
+          "rounds_us": [
+            103.88954166666667,
+            101.91395833333333,
+            101.56425,
+            100.87058333333333,
+            101.362375,
+            101.50575
+          ]
+        },
+        "ix_TN": {
+          "us": 100.82487499999999,
+          "rounds_us": [
+            103.37125,
+            100.73941666666667,
+            100.16408333333334,
+            102.67604166666666,
+            100.91033333333333,
+            99.27933333333333
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 5240320
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 5240320
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 5240320
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 242.85864583333336,
+          "rounds_us": [
+            233.061125,
+            228.93325,
+            1225.5885,
+            282.6250416666667,
+            252.65616666666668,
+            231.38008333333335
+          ]
+        },
+        "ix_NN": {
+          "us": 128.82533333333333,
+          "rounds_us": [
+            128.28383333333332,
+            128.32970833333334,
+            129.30291666666668,
+            165.799875,
+            128.667125,
+            128.98354166666667
+          ]
+        },
+        "ix_TN": {
+          "us": 134.38864583333333,
+          "rounds_us": [
+            127.46308333333333,
+            127.89741666666667,
+            143.14891666666668,
+            155.60633333333334,
+            140.879875,
+            126.89683333333333
+          ]
+        }
+      }
+    },
+    {
+      "projection": "o",
+      "M": 256,
+      "K": 2048,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 26.689166666666665,
+          "rounds_us": [
+            25.086541666666665,
+            27.361416666666667,
+            28.016458333333333,
+            29.80825,
+            26.013416666666668,
+            26.016916666666667
+          ]
+        },
+        "ix_NN": {
+          "us": 24.183708333333335,
+          "rounds_us": [
+            1693.6258333333333,
+            23.884125,
+            4032.8339166666665,
+            24.483291666666666,
+            23.022041666666667,
+            23.070708333333332
+          ]
+        },
+        "ix_TN": {
+          "us": 24.202166666666667,
+          "rounds_us": [
+            24.768541666666668,
+            24.087333333333333,
+            24.480958333333334,
+            24.317,
+            23.108458333333335,
+            22.94025
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 106.03720833333333,
+          "rounds_us": [
+            229.51429166666668,
+            160.602875,
+            120.97675,
+            91.09766666666667,
+            88.13845833333333,
+            86.875875
+          ]
+        },
+        "ix_NN": {
+          "us": 64.002625,
+          "rounds_us": [
+            88.69016666666667,
+            67.73395833333333,
+            63.333333333333336,
+            64.67191666666666,
+            49.75170833333333,
+            50.00775
+          ]
+        },
+        "ix_TN": {
+          "us": 72.19264583333333,
+          "rounds_us": [
+            81.31566666666667,
+            80.61725,
+            63.76804166666667,
+            86.082625,
+            49.33133333333333,
+            49.506458333333335
+          ]
+        }
+      }
+    },
+    {
+      "projection": "o",
+      "M": 257,
+      "K": 2048,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 32.41110416666666,
+          "rounds_us": [
+            32.33125,
+            32.176,
+            32.49095833333333,
+            32.91470833333333,
+            32.61329166666667,
+            32.32808333333333
+          ]
+        },
+        "ix_NN": {
+          "us": 25.730645833333334,
+          "rounds_us": [
+            25.462,
+            26.143291666666666,
+            25.881833333333333,
+            26.141791666666666,
+            25.579458333333335,
+            25.578583333333334
+          ]
+        },
+        "ix_TN": {
+          "us": 26.048145833333336,
+          "rounds_us": [
+            25.52725,
+            3722.2629583333332,
+            25.985375,
+            26.110916666666668,
+            25.755458333333333,
+            26.144291666666668
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 95.34264583333334,
+          "rounds_us": [
+            177.6825,
+            122.23804166666666,
+            99.67308333333334,
+            91.01220833333333,
+            90.47066666666667,
+            91.0015
+          ]
+        },
+        "ix_NN": {
+          "us": 58.152479166666666,
+          "rounds_us": [
+            84.863875,
+            64.54891666666667,
+            63.81041666666667,
+            51.630833333333335,
+            52.49454166666667,
+            51.732375
+          ]
+        },
+        "ix_TN": {
+          "us": 52.397000000000006,
+          "rounds_us": [
+            72.123625,
+            64.20275,
+            51.99795833333334,
+            51.769958333333335,
+            52.51058333333334,
+            52.28341666666667
+          ]
+        }
+      }
+    },
+    {
+      "projection": "o",
+      "M": 512,
+      "K": 2048,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 26.734875000000002,
+          "rounds_us": [
+            41.348416666666665,
+            3987.4096666666665,
+            26.390291666666666,
+            26.342708333333334,
+            26.24020833333333,
+            27.079458333333335
+          ]
+        },
+        "ix_NN": {
+          "us": 26.488166666666665,
+          "rounds_us": [
+            25.440125,
+            27.077208333333335,
+            26.577625,
+            26.39870833333333,
+            3794.1692083333332,
+            25.762166666666666
+          ]
+        },
+        "ix_TN": {
+          "us": 25.5913125,
+          "rounds_us": [
+            24.870916666666666,
+            25.779666666666667,
+            25.402958333333334,
+            26.025541666666665,
+            25.369083333333332,
+            26.765583333333332
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 105.596,
+          "rounds_us": [
+            158.70045833333333,
+            156.25520833333334,
+            122.09166666666667,
+            89.10033333333334,
+            88.507875,
+            87.955625
+          ]
+        },
+        "ix_NN": {
+          "us": 59.751083333333334,
+          "rounds_us": [
+            84.55641666666666,
+            67.38270833333333,
+            66.73279166666667,
+            52.769375,
+            52.65195833333333,
+            52.23166666666667
+          ]
+        },
+        "ix_TN": {
+          "us": 57.67452083333333,
+          "rounds_us": [
+            85.88908333333333,
+            67.06116666666667,
+            62.6805,
+            52.343333333333334,
+            52.27008333333333,
+            52.66854166666667
+          ]
+        }
+      }
+    },
+    {
+      "projection": "o",
+      "M": 1024,
+      "K": 2048,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 42.065895833333336,
+          "rounds_us": [
+            41.418375,
+            41.72083333333333,
+            41.886833333333335,
+            42.79204166666667,
+            42.24495833333334,
+            42.300333333333334
+          ]
+        },
+        "ix_NN": {
+          "us": 40.401604166666665,
+          "rounds_us": [
+            40.56220833333333,
+            40.35358333333333,
+            40.449625,
+            40.455666666666666,
+            39.86175,
+            39.878875
+          ]
+        },
+        "ix_TN": {
+          "us": 40.39522916666667,
+          "rounds_us": [
+            40.577875,
+            40.45804166666667,
+            40.351333333333336,
+            40.439125,
+            40.15725,
+            39.74008333333333
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 122.8398125,
+          "rounds_us": [
+            102.05866666666667,
+            102.90479166666667,
+            244.20254166666666,
+            159.67616666666666,
+            139.50525,
+            106.174375
+          ]
+        },
+        "ix_NN": {
+          "us": 93.78114583333334,
+          "rounds_us": [
+            66.75079166666667,
+            2047.3274583333334,
+            109.912375,
+            103.89770833333333,
+            83.66458333333334,
+            76.814875
+          ]
+        },
+        "ix_TN": {
+          "us": 84.89389583333333,
+          "rounds_us": [
+            67.00879166666667,
+            67.128875,
+            129.30795833333335,
+            104.65008333333333,
+            86.08041666666666,
+            83.707375
+          ]
+        }
+      }
+    },
+    {
+      "projection": "o",
+      "M": 2047,
+      "K": 2048,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 127.85552083333333,
+          "rounds_us": [
+            128.209875,
+            128.928,
+            127.96495833333333,
+            127.74608333333333,
+            127.27541666666667,
+            127.353875
+          ]
+        },
+        "ix_NN": {
+          "us": 73.8859375,
+          "rounds_us": [
+            3366.3198333333335,
+            74.31241666666666,
+            74.06883333333333,
+            73.70304166666666,
+            73.07895833333333,
+            73.30475
+          ]
+        },
+        "ix_TN": {
+          "us": 73.81370833333334,
+          "rounds_us": [
+            74.50825,
+            74.401375,
+            73.85291666666667,
+            73.7745,
+            73.271625,
+            73.17254166666666
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 185.03904166666666,
+          "rounds_us": [
+            213.03545833333334,
+            224.299,
+            184.62091666666666,
+            185.27975,
+            184.179125,
+            184.79833333333335
+          ]
+        },
+        "ix_NN": {
+          "us": 105.82133333333334,
+          "rounds_us": [
+            127.21283333333334,
+            111.72341666666667,
+            111.340875,
+            99.32791666666667,
+            100.30179166666667,
+            99.81833333333333
+          ]
+        },
+        "ix_TN": {
+          "us": 100.2394375,
+          "rounds_us": [
+            128.06779166666666,
+            112.73579166666667,
+            100.2995,
+            100.15775,
+            100.179375,
+            99.98104166666667
+          ]
+        }
+      }
+    },
+    {
+      "projection": "down",
+      "M": 256,
+      "K": 6144,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 61.663875000000004,
+          "rounds_us": [
+            59.40195833333333,
+            62.412375,
+            60.22654166666667,
+            61.96095833333333,
+            61.65920833333333,
+            61.66854166666667
+          ]
+        },
+        "ix_NN": {
+          "us": 51.53360416666666,
+          "rounds_us": [
+            51.313208333333336,
+            51.268708333333336,
+            50.48220833333333,
+            52.27129166666667,
+            51.754,
+            52.09020833333334
+          ]
+        },
+        "ix_TN": {
+          "us": 51.4816875,
+          "rounds_us": [
+            51.92633333333333,
+            51.16320833333333,
+            3693.657875,
+            51.59025,
+            51.150416666666665,
+            51.373125
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 524288
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 152.11854166666666,
+          "rounds_us": [
+            158.07016666666667,
+            146.16691666666668,
+            123.866,
+            226.95491666666666,
+            193.03370833333332,
+            141.5825
+          ]
+        },
+        "ix_NN": {
+          "us": 95.52066666666667,
+          "rounds_us": [
+            91.06808333333333,
+            77.51591666666667,
+            77.45529166666667,
+            136.7545,
+            100.29404166666667,
+            99.97325
+          ]
+        },
+        "ix_TN": {
+          "us": 109.059625,
+          "rounds_us": [
+            90.107,
+            77.133375,
+            2215.070125,
+            135.87054166666667,
+            119.04720833333333,
+            99.07204166666666
+          ]
+        }
+      }
+    },
+    {
+      "projection": "down",
+      "M": 257,
+      "K": 6144,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 72.64022916666667,
+          "rounds_us": [
+            72.569375,
+            72.26958333333333,
+            72.71108333333333,
+            73.31229166666667,
+            72.3565,
+            74.52783333333333
+          ]
+        },
+        "ix_NN": {
+          "us": 56.90079166666666,
+          "rounds_us": [
+            57.342375,
+            3723.206375,
+            56.402,
+            56.459208333333336,
+            56.256625,
+            3374.039875
+          ]
+        },
+        "ix_TN": {
+          "us": 56.65885416666667,
+          "rounds_us": [
+            56.66075,
+            56.60058333333333,
+            56.656958333333336,
+            56.671166666666664,
+            56.71083333333333,
+            56.10525
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 526336
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 137.51070833333335,
+          "rounds_us": [
+            253.49216666666666,
+            193.32833333333335,
+            144.826875,
+            130.12758333333332,
+            129.29670833333333,
+            130.19454166666668
+          ]
+        },
+        "ix_NN": {
+          "us": 88.77856249999999,
+          "rounds_us": [
+            97.58541666666666,
+            94.82675,
+            94.695125,
+            82.69891666666666,
+            82.862,
+            71.24933333333334
+          ]
+        },
+        "ix_TN": {
+          "us": 83.16308333333333,
+          "rounds_us": [
+            115.26170833333333,
+            95.78616666666667,
+            83.133875,
+            82.75104166666667,
+            83.11270833333333,
+            83.19229166666666
+          ]
+        }
+      }
+    },
+    {
+      "projection": "down",
+      "M": 512,
+      "K": 6144,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 76.25702083333334,
+          "rounds_us": [
+            3707.2865833333335,
+            76.59070833333334,
+            76.35508333333334,
+            76.15895833333333,
+            76.00770833333333,
+            76.02245833333333
+          ]
+        },
+        "ix_NN": {
+          "us": 52.23141666666666,
+          "rounds_us": [
+            52.75204166666666,
+            52.686625,
+            52.480666666666664,
+            51.982166666666664,
+            51.76645833333333,
+            51.562333333333335
+          ]
+        },
+        "ix_TN": {
+          "us": 51.49977083333333,
+          "rounds_us": [
+            52.10841666666666,
+            52.05533333333333,
+            51.350125,
+            51.4995,
+            51.50004166666667,
+            51.13825
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 1048576
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 159.49087500000002,
+          "rounds_us": [
+            147.684625,
+            285.08091666666667,
+            223.42533333333333,
+            171.297125,
+            115.595125,
+            138.82854166666667
+          ]
+        },
+        "ix_NN": {
+          "us": 105.023375,
+          "rounds_us": [
+            2400.583166666667,
+            131.87525,
+            116.58829166666666,
+            93.45845833333334,
+            80.667125,
+            80.45320833333334
+          ]
+        },
+        "ix_TN": {
+          "us": 93.58885416666666,
+          "rounds_us": [
+            129.53258333333332,
+            140.94875,
+            94.20275,
+            92.97495833333333,
+            80.34529166666667,
+            79.86158333333333
+          ]
+        }
+      }
+    },
+    {
+      "projection": "down",
+      "M": 1024,
+      "K": 6144,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 107.84129166666666,
+          "rounds_us": [
+            108.7315,
+            108.65304166666667,
+            108.239875,
+            107.44270833333333,
+            107.19279166666666,
+            106.26641666666667
+          ]
+        },
+        "ix_NN": {
+          "us": 98.46339583333334,
+          "rounds_us": [
+            98.76875,
+            98.75216666666667,
+            98.692875,
+            98.23391666666667,
+            97.88066666666667,
+            97.51791666666666
+          ]
+        },
+        "ix_TN": {
+          "us": 98.85283333333334,
+          "rounds_us": [
+            98.35420833333333,
+            99.32791666666667,
+            99.41654166666666,
+            98.785875,
+            98.91979166666667,
+            98.19029166666667
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 2097152
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 168.50364583333334,
+          "rounds_us": [
+            169.12204166666666,
+            168.33466666666666,
+            202.01045833333333,
+            167.735625,
+            168.40958333333333,
+            168.59770833333334
+          ]
+        },
+        "ix_NN": {
+          "us": 125.73154166666666,
+          "rounds_us": [
+            123.19766666666666,
+            1115.878875,
+            137.64279166666665,
+            128.02270833333333,
+            123.24204166666667,
+            123.440375
+          ]
+        },
+        "ix_TN": {
+          "us": 123.13370833333333,
+          "rounds_us": [
+            122.86775,
+            123.39966666666666,
+            130.495625,
+            127.521,
+            122.74408333333334,
+            122.61904166666666
+          ]
+        }
+      }
+    },
+    {
+      "projection": "down",
+      "M": 2047,
+      "K": 6144,
+      "N": 2048,
+      "seed": 1120,
+      "parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        }
+      },
+      "graph": {
+        "current": {
+          "us": 250.7179375,
+          "rounds_us": [
+            251.80754166666668,
+            250.21504166666668,
+            250.39758333333333,
+            1199.3392083333333,
+            251.03829166666668,
+            249.89791666666667
+          ]
+        },
+        "ix_NN": {
+          "us": 193.9405,
+          "rounds_us": [
+            194.48125,
+            193.76375,
+            193.91970833333335,
+            193.96129166666665,
+            193.91908333333333,
+            194.02225
+          ]
+        },
+        "ix_TN": {
+          "us": 187.7186875,
+          "rounds_us": [
+            187.92541666666668,
+            187.654875,
+            187.02208333333334,
+            187.609,
+            187.970875,
+            187.7825
+          ]
+        }
+      },
+      "replay_parity": {
+        "current": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_NN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        },
+        "ix_TN": {
+          "different": 0,
+          "max_ulp": 0,
+          "nonfinite": 0,
+          "elements": 4192256
+        }
+      },
+      "eager": {
+        "current": {
+          "us": 308.0450625,
+          "rounds_us": [
+            307.9608333333333,
+            302.349875,
+            318.832875,
+            308.1292916666667,
+            308.50166666666667,
+            301.02958333333333
+          ]
+        },
+        "ix_NN": {
+          "us": 223.4175833333333,
+          "rounds_us": [
+            220.71508333333333,
+            237.461625,
+            225.32625,
+            221.50891666666666,
+            220.96016666666668,
+            751.720125
+          ]
+        },
+        "ix_TN": {
+          "us": 214.10520833333334,
+          "rounds_us": [
+            966.7116666666667,
+            230.82333333333332,
+            213.80954166666666,
+            212.63133333333334,
+            211.97558333333333,
+            214.400875
+          ]
+        }
+      }
+    }
+  ]
+}

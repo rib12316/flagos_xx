@@ -34,14 +34,15 @@ def w8a8_dynamic_per_token_linear_torch(
     """
     M, _ = x_q.shape
     # 布局自适应：常规栈 weight=[K,N]；沐曦 mctlass 栈 weight=[N,K]（见
-    # w8a8/mctlass_mm.py——unpack 天然布局，process 层跳过转置）。方形层
-    # 用运行时门控消歧。
+    # w8a8/mctlass_mm.py——unpack 天然布局，process 层跳过转置）；V150 TN
+    # 布局同理（VLLM_FL_INTMM_TN）。方形层用运行时门控消歧。
+    from vllm_fl.quantization.w8a8.int_mm import _intmm_tn_layout
     from vllm_fl.quantization.w8a8.mctlass_mm import metax_mctlass_w8a8
 
     N = weight_scale.numel()
     is_nk = (
         weight.shape[0] == N and weight.shape[1] != N
-    ) or metax_mctlass_w8a8()
+    ) or metax_mctlass_w8a8() or _intmm_tn_layout()
     operand = weight.to(torch.float32).t() if is_nk else weight.to(torch.float32)
     accumulator = x_q.to(torch.float32) @ operand
     y = accumulator.mul_(x_scale.reshape(M, 1).to(torch.float32))

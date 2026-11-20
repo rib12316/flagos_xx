@@ -182,9 +182,16 @@ def w8a8_dynamic_per_token_linear_scaledmm(
     Signature matches ``vllm_fl.quantization.w8a8.int_mm`` 1:1 so this impl
     is a pure pass-through of the FlagGems kernel with identical operand
     semantics (``x_q [M,K] int8``, ``weight [K,N] int8``, scales fp32).
+    Under the V150 TN layout weights arrive [N,K] row-major — materialize
+    the transpose for FlagGems (cold fallback path only; the hot path never
+    routes here).
     """
     from flag_gems import scaled_mm
 
+    from vllm_fl.quantization.w8a8.int_mm import _intmm_tn_layout
+
+    if _intmm_tn_layout():
+        weight = weight.t().contiguous()
     return scaled_mm(
         x_q,
         weight,
