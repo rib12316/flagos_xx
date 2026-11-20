@@ -1,0 +1,20 @@
+# F-c 探测矩阵 · 2026-11-20 13:5x · GPU(C500) · coordinator 执行
+# 脚本: scripts/fc/probe_direct_out.py (commit 9ff61a2)
+# 环境: flash_attn_2_cuda md5=0953e2b9d24f3276（与静态反汇编构建一致，构建差异排除）
+# 输入: q=(32,1,16,128) bf16, kc/vc=(2056,16,2,128), bt=[32,64] int32, sl=[32]1024
+
+V1 4Dq形      ERR out must have shape (batch_size, seqlen_q, num_heads, head_size_og)
+V2 3D         ERR 同上
+V3 q3D+out3D  ERR q must have shape (...)            ← q 必须 4D
+V4 q3D+out4D  ERR q must have shape (...)
+V5 out@pos20  ERR We only support head_dim 64 and 192 for S extra.  ← 位20=s_aux, ≠out
+V6 (1,32,..)  ERR out must have shape (...)
+V7 stride≠1   ERR Output tensor must have contiguous last dimension  ← out 通道活着
+V8 fp16       ERR Output must have the same dtype as inputs           ← dtype 检查活着
+V9 KV头形     ERR out must have shape (...)
+
+# 判决：V7/V8 证明 out 参数与检查链真实可达；但 shape 检查在「out 逐维==q.sizes()」
+# 的合同形态下仍拒收（V1），且 wrapper 同输入 out=None 正常 → 静态反汇编
+# （expected=q.sizes(), ArrayRef::equals len=4）与实测矛盾 → 该构建的 out 合同
+# 运行期不可满足（疑似构建内该检查实现/启用存在静态不可见缺陷）。
+# F-c 直写通道负判决关账；env 门默认改 0 封存，等 vendor 更新 .so 复活重测。

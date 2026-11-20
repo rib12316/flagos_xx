@@ -120,3 +120,38 @@ vendor 透出 out）」并仅留报告。
 - `scripts/fc/t0_direct_out.py` —— T0 对拍脚本（GPU，待主会话跑）
 - `scripts/fc/ATTRIBUTION.md` —— 本报告
 - 补丁 2 文件（envs.py / metax flash_attn.py），git commit 于 feat/fc-copy-attribution（未 push）
+
+## 6. 终章判决（11-20 13:5x，探测矩阵后关账）
+
+**直写补丁：负判决，结构性不可动（当前 vendor 构建），封存为休眠逃生门。**
+
+时间线：T0 v1（out=3D 误诊）→ T0 v2（out=4D q 形，静态反推导的合同形态）仍被
+拒 → 探测矩阵九变体一次定案（`scripts/fc/probe_direct_out.py`，原始读数
+`results/20261120_fc/probe_matrix.txt`，.so md5 与反汇编构建一致排除构建差异）：
+
+| 变体 | out 形态/位置 | 结果 | 读数 |
+|---|---|---|---|
+| V1 | (32,1,16,128)=q.sizes() | ERR out must have shape | 合同形态仍拒——**矛盾实锤** |
+| V2 | 3D (32,16,128) | ERR 同上 | 维数假设灭 |
+| V3/V4 | q 改 3D | ERR **q** must have shape | q 必须 4D |
+| V5 | out 挪 python 位 20 | ERR head_dim 64/192 for **S extra** | 位 20=s_aux，位置假设灭 |
+| V6 | (1,32,16,128) | ERR 同 V1 | 轴序假设灭 |
+| V7 | stride(-1)≠1 | ERR **contiguous** last dimension | **out 通道与检查链活着** |
+| V8 | dtype=fp16 | ERR same **dtype** | 同上（dtype 检查活着） |
+| V9 | (32,1,2,128) | ERR 同 V1 | KV 头数合同假设灭 |
+
+判决逻辑：V7/V8 证明 out 参数真实可达且检查链按序执行；但 shape 检查对
+「out 逐维==q.sizes()」（V1，静态反汇编推导的合同）仍拒收，同输入 wrapper
+out=None 正常 → 静态与实测矛盾 → **该构建（md5 0953e2b9…）的 out 形状合同
+运行期不可满足**（对照反汇编：疑似构建内该检查的实现/启用存在静态不可见缺陷）。
+F-c 直写通道判死；唯一复活路径 = vendor 更新 .so 后翻
+`VLLM_FL_FLASH_KVCACHE_DIRECT_OUT=1` 重跑 T0。
+
+收尾态：
+- `envs.py`：env 门**默认改 0**（休眠逃生门）；`flash_attn.py` 头注补判决行；
+- 直写代码保留在库内（env 门后，零行为变化），serve 路径回落现役 staging copy；
+- **归因结论本身不受影响**（§1-§2 全部成立）：主站 42 次/步 = attention 输出
+  staging 拷贝 = MACA flash 无 out 透出 × vllm mutating-op 契约的结构性夹缝，
+  0.14ms/步（~0.5%）在当前闭源 .so 下无自研消除通道（自研融合进 combine 核
+  亦不可行——闭源）；后续若走 §3.5 式跨层重排（attention 输出直连 o_proj
+  quant 的自定义接线）属另一立项，收益同源但改动面大，不属 F-c 范畴。

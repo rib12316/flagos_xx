@@ -82,7 +82,13 @@ logger = init_logger(__name__)
 # num_heads, head_size_og)" / "out must be on CUDA" / 同 dtype）。
 # graph 相容：分支条件=env + 装载期符号探测 + 进程内一次性失败记录，
 # 均在 cudagraph 捕获前定型，无运行时数据依赖。
-# 纪律：env 逃生门 VLLM_FL_FLASH_KVCACHE_DIRECT_OUT=0 回退 staging copy。
+# 纪律：env 逃生门 VLLM_FL_FLASH_KVCACHE_DIRECT_OUT（**默认 0=关**）。
+# 【11-20 探测矩阵九变体判决：该构建（flash_attn_2_cuda md5 0953e2b9…）
+# 的 out 合同运行期不可满足——V1（out 逐维==q.sizes()，静态反推导的合同
+# 形态）仍被拒，V2/V6/V9 同串拒收，而 V7（stride≠1）/V8（dtype≠）换报
+# 对应错误串证明 out 参与检查链真实可达；同输入 wrapper out=None 正常 →
+# 默认关封存为休眠逃生门，vendor 更新 .so 后翻 env 复活重测
+# （T0=scripts/fc/t0_direct_out.py，证据=results/20261120_fc/probe_matrix.txt）】
 # --------------------------------------------------------------
 _FLASH_DIRECT_OUT_STATE: str | None = None  # None=未探测 "on" "off:<原因>"
 
