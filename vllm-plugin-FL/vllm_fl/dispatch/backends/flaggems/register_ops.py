@@ -109,6 +109,19 @@ def register_builtins(registry) -> None:
             vendor=None,
             priority=BackendPriority.DEFAULT + 15,
         ),
+        # D13 fused_add_rms_norm + per-token int8 quant（单 kernel 直出
+        # int8+scale+residual；位口径=同数学两步链，T0 见 feat/d13 分支）
+        OpImpl(
+            op_name="fused_add_rms_norm_quant_int8",
+            impl_id="default.flagos_bare",
+            kind=BackendImplKind.DEFAULT,
+            fn=_bind_is_available(
+                backend.fused_add_rms_norm_quant_int8_bare,
+                is_avail,
+            ),
+            vendor=None,
+            priority=BackendPriority.DEFAULT + 15,
+        ),
         # W8A8 dynamic-token linear GEMM. The torch._int_mm impl is the
         # preferred path on BI-V150 (cuBLAS int8, int32 accumulation); the
         # FlagGems scaled_mm impl stays registered one priority step lower

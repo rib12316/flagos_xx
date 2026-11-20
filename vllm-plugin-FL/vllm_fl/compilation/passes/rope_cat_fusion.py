@@ -1,0 +1,390 @@
+# Copyright (c) 2026 BAAI. All rights reserved.
+"""F-a：rope(Q)+rope(K) 融合 compile pass（插件首个自定义 inductor pass）。
+
+配方逐行照抄上游 vllm/compilation/passes/fusion/rope_kvcache_fusion.py 与
+mla_rope_kvcache_cat_fusion.py（direct_register_custom_op + VllmPatternReplacement
++ VllmFusionPatternMatcherPass）。
+
+归因结论（为什么匹配 native 分解）
+----------------------------------------------------------------------------
+compile 模式下 vllm CustomOp 默认解绑（forward_native），serve 图中 rope 即
+RotaryEmbedding.forward_static 的 aten 分解（index_select → chunk → mul/sub/add
+→ cat）。pattern 追踪 ApplyRotaryEmb.forward_static 的 NeoX 分支和保留 head 维的
+Q/K 输出。图内无独立 cat 算子待融合（cat 是 rope 分解的内件，已被
+inductor 并入 cat_3/cat_4 两核）；本 pass 做的是把两核换成一个 opaque 融合 op。
+
+替换语义
+----------------------------------------------------------------------------
+  pattern:     q,k,v = qkv.split([qs,ks,vs],-1); q,k = rope(positions,q,k,cs)
+               → q.view(T,NQ,D), k.view(T,NKV,D), v.view(T,NKV,D)
+               （v 必须进输出：matcher 要求节点 users 数与真实图一致，缺第三
+               getitem 整模式失配——CPU 干跑实证 MATCH_COUNT 0→1 的根因）
+  replacement: vllm.fl_rope_qk_cat(qkv, positions, cs, NQ, NKV, D) → (Q',K')
+               （纯函数，输出即 [T,NQ,D]/[T,NKV,D]，布局与 view 后原张量
+               逐位同构）+ v 原样 view
+其它 qkv 消费者不在匹配域内、原样保留。op 无 mutation → 不需要
+auto_functionalized（上游用它只因 fused op 原地写）。
+
+接线（WorkerFL 构造期注入）
+----------------------------------------------------------------------------
+compilation_config.inductor_compile_config["post_grad_custom_post_pass"] =
+<本 pass 实例>（backends.py configure_post_pass 会把它 add 进 PostGradPassManager
+并在 pass 尾部执行——与 vllm 官方 ActivationFusionPass 同机制、免改 vllm 源码）。
+env 门：VLLM_FL_FA_ROPECAT=0 完全不注入。无运行时分支 → cudagraph 捕获安全。
+
+风险登记
+----------------------------------------------------------------------------
+- dynamo/pattern 不匹配（真实图与 pattern 追踪出现结构差，如 inductor 预处理
+  改写 view/reshape 形态）：pass 静默 0 命中（log debug "Replaced 0"），退化为
+  现状两核，无正确性风险；上机用 VLLM_PATTERN_MATCH_DEBUG=1 取证。
+- pass 在 config 期构造（模型未建），头数从 hf_config 读；TP>1 时头数需整除，
+  当前单卡 C500 无 TP。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import torch
+import torch._inductor.pattern_matcher as pm
+from torch import fx
+
+from vllm.compilation.passes.inductor_pass import enable_fake_mode
+from vllm.compilation.passes.vllm_inductor_pass import (
+    VllmFusionPatternMatcherPass,
+    VllmPatternReplacement,
+    _remove_noop_permutes,
+)
+from vllm.config import VllmConfig
+from vllm.logger import init_logger
+from vllm.utils.torch_utils import direct_register_custom_op
+
+logger = init_logger(__name__)
+
+
+def _probe(msg: str) -> None:
+    """文件探针：直接 append 到 /tmp/fa_pass.log（不经任何 logger 树）。
+
+    背景：vllm_fl.worker.worker 的 vllm logger 在 EngineCore 进程吞 INFO，
+    smoke #2/#3/#4 的「零痕迹」无法区分「没调用」与「调用了不匹配」。
+    路径可被 VLLM_FL_FA_PROBE 覆盖；任何异常静默（探针绝不打断编译）。
+    """
+    import os
+    import time
+
+    try:
+        path = os.environ.get("VLLM_FL_FA_PROBE", "/tmp/fa_pass.log")
+        with open(path, "a") as f:
+            f.write(
+                f"[{time.strftime('%H:%M:%S')} pid={os.getpid()}] {msg}\n"
+            )
+    except Exception:
+        pass
+
+
+_probe("MODULE_IMPORT rope_cat_fusion")
+
+# 本进程内已构造的 pass 实例（WorkerFL 注入时登记）。
+# configure_post_pass 自愈的兜底来源：即便 compile 用的 config 对象与注入的
+# 不是同一份，也能把同一进程内的实例补进 pass manager。
+_FA_PASS_INSTANCE: list = [None]
+
+
+def _install_backend_sync() -> None:
+    """诊断+自愈：保证注入的 pass 在 compile 期真的进 PostGradPassManager。
+
+    serve 探针实证（14:45）: pass 注入成功（WORKER_INJECT icc_id/pass_id 与
+    INIT 一致）但**零 UUID/零 CALL** ⇒ configure_post_pass 时没被 add。
+    backends.py: `self.inductor_config = deepcopy(
+    self.compilation_config.inductor_compile_config)` 是**构造期快照**；
+    若 VllmBackend 构造早于我们的注入，快照里就没有 key，configure_post_pass
+    的 `if self.pass_key in self.inductor_config` 直接跳过。
+
+    本函数包裹 configure_post_pass：打点三处身份，并在快照缺 key、live
+    dict 有 key 时把实例补进快照（自愈），然后照常走 vllm 原逻辑。
+    """
+    try:
+        from vllm.compilation.backends import VllmBackend
+    except Exception:
+        _probe("BACKEND_PATCH_SKIP import_fail")
+        return
+    if getattr(VllmBackend, "_fa_sync_installed", False):
+        return
+    VllmBackend._fa_sync_installed = True
+
+    _orig_configure = VllmBackend.configure_post_pass
+
+    def _fa_configure_post_pass(self) -> None:
+        try:
+            key = "post_grad_custom_post_pass"
+            live = self.compilation_config.inductor_compile_config
+            _probe(
+                f"CONFIGURE_POST_PASS pass_key={self.pass_key} "
+                f"in_snapshot={key in self.inductor_config} "
+                f"in_live={key in live} "
+                f"live_id={id(live)} snapshot_id={id(self.inductor_config)}"
+            )
+            if key == self.pass_key and key not in self.inductor_config:
+                if key in live:
+                    self.inductor_config[key] = live[key]
+                    _probe("CONFIGURE_SELFHEAL copied live pass into snapshot")
+                elif _FA_PASS_INSTANCE[0] is not None:
+                    # 极端情形：compile 用的 config 对象与 worker 注入的不是
+                    # 同一份（或 live dict 被重建）——回落到模块级注册表。
+                    # 同一 EngineCore 进程内实例共享；跨进程则 _FA_PASS_INSTANCE
+                    # 为 None（此时不会误注入）。
+                    self.inductor_config[key] = _FA_PASS_INSTANCE[0]
+                    _probe("CONFIGURE_SELFHEAL used module registry")
+        except Exception:
+            import traceback
+
+            _probe(f"CONFIGURE_PROBE_ERR {traceback.format_exc()[:800]}")
+        return _orig_configure(self)
+
+    VllmBackend.configure_post_pass = _fa_configure_post_pass
+    _probe("BACKEND_PATCH_INSTALLED")
+
+
+def _trace_keep_view(*args, **kwargs) -> fx.GraphModule:
+    """追踪时**不做** view→reshape 归一化（真实 vllm post-grad 图为 aten.view）。
+
+    VllmFusionPatternMatcherPass 的默认 _trace_fn 会调 view_to_reshape 把
+    pattern 的 aten.view 改写成 aten.reshape；而 serve 的 cached aten 图
+    （/tmp/torchinductor_root/fxgraph/...）实证 rope 段仍是 aten.view
+    （`view_9 = aten.view.default(getitem_12, [arg1_1, -1, 128])`）。
+    target 不同即整模式失配，故本变体保留原始 view 形态。
+    """
+    gm = pm.fwd_only(*args, **kwargs)
+    _remove_noop_permutes(gm)
+    return gm
+
+
+def _fl_rope_qk_cat_impl(
+    qkv: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    num_q_heads: int,
+    num_kv_heads: int,
+    head_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    from vllm_fl.dispatch.backends.flaggems.impl.rope_cat import rope_qk_cat_alloc
+
+    return rope_qk_cat_alloc(
+        qkv,
+        positions,
+        cos_sin_cache,
+        num_q_heads=num_q_heads,
+        num_kv_heads=num_kv_heads,
+    )
+
+
+def _fl_rope_qk_cat_fake(
+    qkv: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    num_q_heads: int,
+    num_kv_heads: int,
+    head_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    num_tokens = qkv.shape[0]
+    return (
+        torch.empty(
+            (num_tokens, num_q_heads, head_size), dtype=qkv.dtype, device=qkv.device
+        ),
+        torch.empty(
+            (num_tokens, num_kv_heads, head_size), dtype=qkv.dtype, device=qkv.device
+        ),
+    )
+
+
+direct_register_custom_op(
+    op_name="fl_rope_qk_cat",
+    op_func=_fl_rope_qk_cat_impl,
+    mutates_args=[],  # 纯函数：输出为全新张量，无原地写
+    fake_impl=_fl_rope_qk_cat_fake,
+)
+
+FUSED_OP = torch.ops.vllm.fl_rope_qk_cat.default
+
+
+class FLRopeQKCatPattern(VllmPatternReplacement):
+    """Match NeoX rotation with head-shaped Q/K and a strided V view."""
+
+    def __init__(
+        self,
+        num_q_heads: int,
+        num_kv_heads: int,
+        head_size: int,
+    ) -> None:
+        self.num_q_heads = num_q_heads
+        self.num_kv_heads = num_kv_heads
+        self.head_size = head_size
+        self.q_size = num_q_heads * head_size
+        self.k_size = num_kv_heads * head_size
+        self.v_size = num_kv_heads * head_size
+
+    def get_inputs(self) -> list:
+        T = 5
+        L = 4096
+        qkv = torch.empty(T, self.q_size + self.k_size + self.v_size,
+                          dtype=torch.bfloat16, device="cuda")
+        positions = torch.empty(T, dtype=torch.int64, device="cuda")
+        cos_sin_cache = torch.empty(L, self.head_size,
+                                    dtype=torch.bfloat16, device="cuda")
+        return [qkv, positions, cos_sin_cache]
+
+    @property
+    def pattern(self):
+        """head-shaped rope：**不含** forward_static 末尾的 reshape 回平铺。
+
+        serve 探针实证（15:53，pid=380845）：post-grad 图里 rope 段为
+          reshape(q,[T,-1,128]) → split(64) → mul/sub/add → cat[T,NQ,D]
+        且 cat **直接出图**（forward_static 末尾的 reshape(cat,[T,2048]) 被
+        折叠掉，cat 与 [T,2048] 同内存）。若 pattern 走 forward_static，
+        就会多出一个末尾 reshape → 与真实图失配。故这里直接调
+        ApplyRotaryEmb.forward_static（只做旋转、无末尾 reshape）。
+        """
+        q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
+        num_kv_heads = self.num_kv_heads
+        head_size = self.head_size
+
+        def pattern(qkv, positions, cos_sin_cache):
+            from vllm.model_executor.layers.rotary_embedding.common import (
+                ApplyRotaryEmb,
+            )
+
+            q, k, v = qkv.split([q_size, k_size, v_size], dim=-1)
+            cos_sin = cos_sin_cache.index_select(0, positions)
+            cos, sin = cos_sin.chunk(2, dim=-1)
+            q3 = q.view(positions.shape[0], -1, head_size)
+            k3 = k.view(positions.shape[0], -1, head_size)
+            q3 = ApplyRotaryEmb.forward_static(q3, cos, sin, True)
+            k3 = ApplyRotaryEmb.forward_static(k3, cos, sin, True)
+            return q3, k3, v.view(-1, num_kv_heads, head_size)
+
+        return pattern
+
+    def supports_layout(self, match: pm.Match) -> bool:
+        qkv, pos, cache = (match.kwargs[key].meta['val'] for key in
+                           ('qkv', 'positions', 'cos_sin_cache'))
+        return (qkv.dtype == cache.dtype == torch.bfloat16 and pos.dtype == torch.int64
+                and qkv.device.type == 'cuda' and qkv.device == pos.device == cache.device
+                and qkv.ndim == cache.ndim == 2 and pos.ndim == 1
+                and qkv.shape[0] == pos.shape[0] and cache.shape[1] == self.head_size
+                and qkv.shape[1] == self.q_size + self.k_size + self.v_size
+                and all(t.is_contiguous() for t in (qkv, pos, cache)))
+
+    @property
+    def replacement(self):
+        num_q_heads, num_kv_heads = self.num_q_heads, self.num_kv_heads
+        head_size = self.head_size
+        q_size, k_size, v_size = self.q_size, self.k_size, self.v_size
+
+        def replacement(qkv, positions, cos_sin_cache):
+            _, _, v = qkv.split([q_size, k_size, v_size], dim=-1)
+            # 融合 op 输出即 [T,NQ,D]/[T,NKV,D] 连续——与 pattern 输出同形同 layout
+            q, k = FUSED_OP(
+                qkv,
+                positions,
+                cos_sin_cache,
+                num_q_heads,
+                num_kv_heads,
+                head_size,
+            )
+            return q, k, v.view(-1, num_kv_heads, head_size)
+
+        return replacement
+
+
+class FLRopeCatFusionPass(VllmFusionPatternMatcherPass):
+    """F-a pass 实体。构造期注册 pattern（fake mode 追踪，不触设备）。"""
+
+    def __init__(self, config: VllmConfig) -> None:
+        super().__init__(config, "fl_rope_cat_fusion_pass")
+        _probe(
+            f"INIT pass_id={id(self)} "
+            f"icc_id={id(config.compilation_config.inductor_compile_config)} "
+            f"key_present={'post_grad_custom_post_pass' in config.compilation_config.inductor_compile_config}"
+        )
+        hf_config: Any = (
+            config.model_config.hf_config if config.model_config else None
+        )
+        num_q_heads = getattr(hf_config, "num_attention_heads", None)
+        num_kv_heads = getattr(hf_config, "num_key_value_heads", None) or num_q_heads
+        head_size = getattr(hf_config, "head_size", None)
+        if head_size is None and num_q_heads:
+            hidden = getattr(hf_config, "hidden_size", 0)
+            if hidden and hidden % num_q_heads == 0:
+                head_size = hidden // num_q_heads
+        if not (num_q_heads and num_kv_heads and head_size):
+            logger.warning(
+                "F-a rope_cat: 无法从 hf_config 解出头形（%s/%s/%s），pass 空转",
+                num_q_heads, num_kv_heads, head_size,
+            )
+            return
+        if (num_q_heads, num_kv_heads, head_size) == (16, 2, 128):
+            self._register_variants(FLRopeQKCatPattern(num_q_heads, num_kv_heads, head_size))
+        self.dump_patterns(config, self.pm_pass)
+
+    @enable_fake_mode
+    def _register_variants(self, pr: FLRopeQKCatPattern) -> None:
+        for trace_fn in (self._trace_fn, _trace_keep_view):
+            pm.register_replacement(
+                pr.pattern,
+                pr.replacement,
+                pr.get_inputs(),
+                trace_fn,
+                self.pm_pass,
+                extra_check=pr.supports_layout,
+            )
+            self._pattern_replacements.append(pr)
+        _probe(
+            "REGISTER neox=True head_outputs=True "
+            f"total={len(self._pattern_replacements)}"
+        )
+
+    def is_applicable_for_range(self, compile_range) -> bool:
+        ok = super().is_applicable_for_range(compile_range)
+        _probe(f"APPLICABLE range={compile_range} -> {ok}")
+        return ok
+
+    def uuid(self) -> str:
+        u = super().uuid()
+        _probe(f"UUID {u}")
+        return u
+
+    def __call__(self, graph) -> None:
+        """文件探针（不经 logger 树——worker.py 的 vllm logger 会吞 INFO）：
+        分辨「pass 没被调用」vs「被调用但图形态不匹配」。"""
+        try:
+            nodes = list(graph.nodes)
+            cats = [n for n in nodes if "cat" in str(getattr(n, "target", ""))]
+            views = [
+                n for n in nodes
+                if "view" in str(getattr(n, "target", ""))
+                or "reshape" in str(getattr(n, "target", ""))
+            ]
+            idxs = [n for n in nodes if "index" in str(getattr(n, "target", ""))]
+            _probe(
+                f"CALL pass_id={id(self)} nodes={len(nodes)} "
+                f"cat={len(cats)} view_reshape={len(views)} index={len(idxs)}"
+            )
+            for n in (cats[:3] + views[:3] + idxs[:3]):
+                _probe(f"  NODE {n.target} args={repr(n.args)[:200]}")
+        except Exception:
+            import traceback
+
+            _probe(f"CALL_PROBE_ERR {traceback.format_exc()[:1500]}")
+        try:
+            super().__call__(graph)
+        except Exception:
+            import traceback
+
+            _probe(f"CALL_EXCEPTION {traceback.format_exc()[:2000]}")
+            raise
+        _probe(f"CALL_DONE matched={self.matched_count}")
+
+
+def make_rope_cat_pass(config: VllmConfig) -> FLRopeCatFusionPass:
+    """platform.py 注入用工厂（set_current_vllm_config 上下文由调用方管）。"""
+    return FLRopeCatFusionPass(config)

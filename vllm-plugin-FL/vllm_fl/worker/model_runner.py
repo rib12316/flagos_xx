@@ -5338,6 +5338,16 @@ class ModelRunnerFL(
             prepare_communication_buffer_for_model(self.model)
             # FL: register IO dumper module hooks
             register_io_module_hooks(self.model)
+            # FL D13: 装载期静态配对 fused_add_rms_norm+per-token-int8-quant
+            # （§3.5；env 门 VLLM_FL_D13_NORM_QUANT=0 = 零改动回退两步链，
+            # 详见 vllm_fl/quantization/w8a8/d13_norm_quant.py 头注）。必须在
+            # 下方 GraphWrapper/compile 包裹之前——dynamo/capture 要看到已
+            # patch 的模块。
+            from vllm_fl.quantization.w8a8.d13_norm_quant import (
+                install_d13_pairings,
+            )
+
+            install_d13_pairings(self.model, self.vllm_config)
             if (drafter := getattr(self, "drafter", None)) and (
                 drafter_model := getattr(drafter, "model", None)
             ):
