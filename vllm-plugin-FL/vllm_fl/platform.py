@@ -172,6 +172,58 @@ class PlatformFL(Platform):
         """Import IR kernel modules. OOT platforms override to import their own."""
         import vllm.kernels  # noqa: F401
 
+    # --------------------------------------------------------
+    # A-H4 · IR 优先级接线：fused_add_rms_norm → mcoplib C 核（per-op，非全局）。
+    # 背景：compiled 态 norm 走 vllm IR 系统
+    # （RMSNorm.forward_cuda → ir.ops.fused_add_rms_norm.maybe_inplace，
+    #  vllm/model_executor/layers/layernorm.py:88）。基类 Platform 默认恒返回
+    # priority=["native"]（vllm/platforms/interface.py:1143）→ inductor 分解生成
+    # triton 核（trace 所见 triton_red_fused_fused_add_rms_norm_0/2，
+    # serve 内 ~0.60ms/步）；vllm_c impl（vllm/kernels/vllm_c.py:51 →
+    # torch.ops._C.fused_add_rms_norm，mcoplib C++ 核，双 in-place）因插件从不
+    # override 被排除——本 override 即排除根因的修复。上游先例（签名/装饰器/返回
+    # 类型照抄）：platforms/cuda.py:684、platforms/rocm.py:1000、platforms/xpu.py:341。
+    # 只翻 fused_add_rms_norm 一项（serve decode 真实路径，residual 形态）；
+    # rms_norm（非融合 final-norm 用）保持 native = 单变量纪律。IrOpPriorityConfig
+    # 本就按 op 分字段（vllm/config/kernel.py:31-35），vllm_c.py 全文也只注册
+    # rms_norm/fused_add_rms_norm 两个 ir op——无其它 collateral op 被连带切换。
+    # guard 自查（vllm_c.py:44 rms_add_no_var_size：variance_size is None 且
+    # weight.dtype == x.dtype）：本模型 LlamaForCausalLM hidden=2048/eps=1e-6/bf16，
+    # variance_size_override=None、weight bf16 == x bf16 → 成立；Gemma 类
+    # （weight.float()+1.0 → fp32 weight）被该 guard 自动排除，无 +1 语义风险。
+    # 编译链安全：worker init（v1/worker/worker_base.py:93）在编译前 set_default；
+    # VllmIRLoweringPass 按 priority 选 impl 内联（replace_by_example 假张量追踪），
+    # 其后 UnsafeCloneEliminationPass 消除 inplace impl 的功能性 clone（pass_manager
+    # .py:197-199）——mcoplib _C.fused_add_rms_norm 无 Meta 注册但双 in-place 无返回
+    # 值 schema 走 fake fallthrough，已实测可被 fake 追踪；priority 进 lowering pass
+    # uuid → 编译缓存自动失效。全部决定在装载期完成（VllmConfig.__post_init__ →
+    # set_platform_defaults → 本方法），无运行时分支，cudagraph 安全。
+    # VLLM_FL_IR_NORM=0 一键回退（完全不 override = 上游默认 native），
+    # env 门默认值/注释风格抄 mctlass 先例（VLLM_FL_MCTLASS_W8A8）。
+    # 实测数字：见 scripts/ah4/t0_norm_ab.py 输出（T0）与 results/<日期>_ah4/（T1）。
+    @classmethod
+    def get_default_ir_op_priority(
+        cls, vllm_config: "VllmConfig"
+    ) -> "IrOpPriorityConfig":
+        """A-H4: fused_add_rms_norm 优先 mcoplib C 核，native 兜底。
+
+        supports_args guard 不满足的调用点（如 Gemma fp32 weight）由 dispatch
+        自动回落 native，故 vllm_c 在前是安全的。
+        """
+        if os.environ.get("VLLM_FL_IR_NORM", "1").lower() in ("0", "false", "off"):
+            return super().get_default_ir_op_priority(vllm_config)
+        if cls.vendor_name != "metax":
+            # 仅沐曦栈启用：mcoplib 装载与 T0 判决均以 metax 为准；其它 vendor
+            # 维持上游默认（iluvatar/ascend 天然被 vllm_c 的 CUDA_ALIKE supported
+            # 排除；nvidia 上游 inductor 态有意用 native，不越权改其行为）。
+            return super().get_default_ir_op_priority(vllm_config)
+
+        from vllm.config.kernel import IrOpPriorityConfig
+
+        return IrOpPriorityConfig.with_default(
+            ["native"], fused_add_rms_norm=["vllm_c", "native"]
+        )
+
     @classmethod
     def check_and_update_config(cls, vllm_config: "VllmConfig") -> None:
         parallel_config = vllm_config.parallel_config
