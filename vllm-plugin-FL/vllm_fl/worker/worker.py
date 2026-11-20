@@ -202,6 +202,42 @@ class WorkerFL(WorkerBase):
         is_driver_worker: bool = False,
     ):
 
+        # --------------------------------------------------------
+        # F-a rope+cat 融合 pass 注入（feat/fa-rope-cat-fusion，11-20）。
+        # 为什么在 WorkerFL 而不在 platform.check_and_update_config：
+        #   ① 后者只在 APIServer 进程的 VllmConfig.__post_init__ 跑一次，
+        #      塞进 inductor_compile_config 的 pass 实例会随 config
+        #      cloudpickle 传 EngineCore 子进程——pattern matcher 内含
+        #      PyCapsule 不可 pickle（smoke serve 实崩）；
+        #   ② inductor_passes 字符串通道只在 CompilationConfig.__post_init__
+        #      解析（早于插件变异，塞了也不解析，死路）；
+        #   ③ WorkerFL.__init__ 在 EngineCore 子进程内执行、且先于
+        #      load_model（编译在此触发）——此处注入的实例永不跨进程。
+        # 静态决定、无运行时分支（cudagraph 安全）；pattern 0 命中时静默
+        # 退回现状两核。env 门：VLLM_FL_FA_ROPECAT=0 完全不注入。
+        try:
+            from vllm_fl import envs as fl_envs
+
+            _cc = vllm_config.compilation_config
+            if (
+                fl_envs.VLLM_FL_FA_ROPECAT
+                and "post_grad_custom_post_pass" not in _cc.inductor_compile_config
+            ):
+                from vllm_fl.compilation.passes.rope_cat_fusion import (
+                    make_rope_cat_pass,
+                )
+
+                with set_current_vllm_config(vllm_config, check_compile=False):
+                    _cc.inductor_compile_config[
+                        "post_grad_custom_post_pass"
+                    ] = make_rope_cat_pass(vllm_config)
+                logger.info(
+                    "F-a rope+cat fusion pass injected in worker "
+                    "(VLLM_FL_FA_ROPECAT=0 to disable)"
+                )
+        except Exception:
+            logger.exception("F-a rope+cat fusion pass 注入失败，退回默认路径")
+
         if (
             vllm_config.num_speculative_tokens == 1
             and vllm_config.scheduler_config.async_scheduling

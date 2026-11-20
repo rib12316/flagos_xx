@@ -72,13 +72,18 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
 - **pattern 必须绑定 v 并作第三输出**：pattern matcher 要求节点 users 数一致，
   真实图 split 的第三个 getitem 喂 v-view——CPU 干跑实测缺它整模式失配
   （MATCH_COUNT 0 → 补上后 1）。
-- 注入：`platform.py` metax 段（compilation_config 变异先例区）把 pass 实例塞
-  `inductor_compile_config["post_grad_custom_post_pass"]`（backends.py
-  configure_post_pass 会 add 进 PostGradPassManager——vllm 官方
-  ActivationFusionPass 同机制；`inductor_passes` dict 路由只在
-  CompilationConfig.__post_init__ 解析，config 期后注入必须走实例直塞）。
-  env 门 `VLLM_FL_FA_ROPECAT`（默认开，=0 完全不注入）。头数从 hf_config 读
-  （16/2/128），装载期一次定型，无运行时分支 → cudagraph 安全。
+- 注入（**v2：WorkerFL.__init__，EngineCore 子进程内**）：把 pass 实例塞
+  `vllm_config.compilation_config.inductor_compile_config[
+  "post_grad_custom_post_pass"]`（backends.py configure_post_pass 会 add 进
+  PostGradPassManager——vllm 官方 ActivationFusionPass 同机制）。头数从
+  hf_config 读（16/2/128），装载期一次定型，无运行时分支 → cudagraph 安全。
+  env 门 `VLLM_FL_FA_ROPECAT`（默认开，=0 完全不注入）。
+  **注入点搬家的原因（smoke serve 实崩教训，§3.6）**：platform 侧（APIServer
+  进程）塞的实例会随 config cloudpickle 传 EngineCore 子进程 → pattern
+  matcher 内含 PyCapsule 不可 pickle → spawn 崩；`inductor_passes` 字符串通道
+  只在 CompilationConfig.__post_init__ 解析（早于插件变异，死路）；
+  WorkerFL.__init__ 在子进程内、先于 load_model（编译触发点）——实例永不
+  跨进程。
 
 ## 3. 口径声明
 
@@ -89,7 +94,7 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
 - 计时铁律：L2-warm（同输入反复跑，elementwise 不破坏输入）+ CUDA graph replay
   中位（抄 d9_quant_probe_metax.py 的 bench()）。
 - 上机顺序：T0 过门槛（bitwise + ≥1.15×）→ smoke serve（log 确认
-  `F-a rope+cat fusion pass injected` + pattern 命中数 + decode 步 trace 里
+  `F-a rope+cat fusion pass injected in worker` + pattern 命中数 + decode 步 trace 里
   cat_3/cat_4 消失、fl_rope_qk_cat 出现 ~42 次/步）→ T1 quick 双形状三轮中位
   ≥+0.3% 才立项合入。
 
@@ -117,6 +122,28 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
    形状不 trap，但属 MACA 已知风险类（topk_topp 前科），钳 0 不改数学
    （掩码 lane 本就不写）、零成本上保险。重跑对钳后版本重新 bitwise 验证。
 
+## 3.6 T0 重跑结果 + smoke serve 崩溃与接线 v2（2026-11-20 13:4x）
+
+- **T0 重跑全绿大幅过门**（results/20261120_fa_ropecat/t0_r2.log + csv）：
+  bitwise M=32/64 q/k maxdiff 0（含负位置回卷 + 钳 0 版复证）；计时
+  **M=32 1.61× / M=64 1.54×**（门槛 1.15×）；M=2048 1.00×（prefill 信息位，
+  无回归）；e2e 投影 **+0.58%**（0.42ms/步池 × 节流比例）。
+- **smoke serve 崩（已修）**：APIServer 向 EngineCore spawn 时
+  `cloudpickle.dumps(config)` → `TypeError: cannot pickle 'PyCapsule' object`
+  （/tmp/smoke_fa.log）。根因 = v1 注入（platform.check_and_update_config，
+  APIServer 进程）把 pass 实例塞进了会被 pickle 的 config；pattern matcher
+  内含 torch._C 级 PyCapsule。
+- **接线 v2（本 commit）**：注入点搬到 `vllm_fl/worker/worker.py`
+  WorkerFL.__init__ 头部——EngineCore 子进程内执行、先于 load_model（编译
+  触发点），实例永不跨进程。三条候选通道的读码结论：
+  ① inductor_passes 字符串：只在 CompilationConfig.__post_init__ 解析
+  （vllm/config/compilation.py:923，运行于插件变异**之前**）——塞了也不解析，
+  死路；② 实例 pickle 化（__getstate__ 重建）：MatcherCustomOp 重建需要
+  set_current_vllm_config 上下文，unpickle 时刻没有——丑且脆；③ 子进程注入
+  （选中）。CPU 证明：无实例 config pickle 12980B OK；有实例复现同款
+  TypeError；pickle 往返后的 config 上执行 worker 注入 → 2 patterns OK +
+  deepcopy OK。
+
 ## 4. CPU 干跑实证（无卡，FakeTensorMode，不触设备）
 
 | 检查 | 结果 |
@@ -128,8 +155,8 @@ CPU 符号追踪 `forward_static` 证实——系 inductor 间接索引 codegen 
 | 替换后图 fake 执行 | 输出 (5,16,128)/(5,2,128) bf16，Q'/K' 连续、v 保持 strided view（stride 2560）——与生产布局一致 |
 
 未验证（需上机）：真实 dynamo postgrad 图匹配（模拟图用 pm.fwd_only 追踪，
-与 aot 分解表理论同构——上游同款风险）、耗时。位精确与核运行**已在首跑实证**
-（§3.5），待钳 0 版本复证。
+与 aot 分解表理论同构——上游同款风险）。位精确、核运行、计时**已上机实证**
+（§3.5/§3.6：bitwise 0 + 1.61×/1.54×）。
 
 ## 5. 上机申请（精确命令）
 
@@ -150,7 +177,7 @@ python3 scripts/fa/t0_rope_cat.py 2>&1 | tee results/20261120_fa_ropecat/t0.log
 VLLM_FL_FA_ROPECAT=1 python3 -m vllm.entrypoints.openai.api_server \
   --model /workspace/MiniCPM5-2B-w8a8-v2 --... (serve 参数照抄 d5 冻结集) \
   2>&1 | tee /tmp/smoke_fa.log
-#    看点：`F-a rope+cat fusion pass injected`、`Replaced N patterns`（期望 ~42/图）、
+#    看点：`F-a rope+cat fusion pass injected in worker`（WorkerFL 日志）、`Replaced N patterns`（期望 ~42/图）、
 #    decode trace 中 triton_poi_fused_cat_3/4 消失、fl_rope_qk_cat 出现
 # 3b) 回退臂（A/B）
 VLLM_FL_FA_ROPECAT=0 python3 -m vllm.entrypoints.openai.api_server ...（同上）

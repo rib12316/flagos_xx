@@ -363,39 +363,15 @@ class PlatformFL(Platform):
                 attention_config.disable_flashinfer_prefill = True
 
             # ----------------------------------------------------
-            # F-a rope+cat 融合（feat/fa-rope-cat-fusion，11-20）：
-            # decode 步 rope(Q)/rope(K) 两个 inductor poi 核（cat_3 5.81µs +
-            # cat_4 4.51µs/层·步，后者 decode 仅 4 CTA）单核化。装载期注入
-            # post-grad pass（与 vllm 官方 ActivationFusionPass 同机制），
-            # 静态决定、无运行时分支（cudagraph 安全）；pattern 0 命中时静默
-            # 退回现状两核。env 门：VLLM_FL_FA_ROPECAT=0 不注入。
-            from vllm_fl import envs as fl_envs
-
-            if (
-                fl_envs.VLLM_FL_FA_ROPECAT
-                and "post_grad_custom_post_pass"
-                not in compilation_config.inductor_compile_config
-            ):
-                try:
-                    from vllm.config import set_current_vllm_config
-                    from vllm_fl.compilation.passes.rope_cat_fusion import (
-                        make_rope_cat_pass,
-                    )
-
-                    with set_current_vllm_config(
-                        vllm_config, check_compile=False
-                    ):
-                        compilation_config.inductor_compile_config[
-                            "post_grad_custom_post_pass"
-                        ] = make_rope_cat_pass(vllm_config)
-                    logger.info(
-                        "F-a rope+cat fusion pass injected "
-                        "(VLLM_FL_FA_ROPECAT=0 to disable)"
-                    )
-                except Exception:
-                    logger.exception(
-                        "F-a rope+cat fusion pass 注入失败，退回默认路径"
-                    )
+            # NOTE(F-a rope+cat 融合)：pass 注入**不在此处**。本方法只在
+            # APIServer 进程的 VllmConfig.__post_init__ 跑一次，塞进
+            # inductor_compile_config 的 pass 实例会随 config cloudpickle 传
+            # EngineCore 子进程——pattern matcher 内含 PyCapsule 不可 pickle
+            # （smoke serve 实崩，/tmp/smoke_fa.log）；而 inductor_passes 字符
+            # 串通道只在 CompilationConfig.__post_init__ 解析（早于本方法，
+            # 死路）。注入点 = vllm_fl/worker/worker.py WorkerFL.__init__
+            # （EngineCore 子进程内、load_model 触发编译之前），env 门
+            # VLLM_FL_FA_ROPECAT。
 
     @classmethod
     def get_attn_backend_cls(
