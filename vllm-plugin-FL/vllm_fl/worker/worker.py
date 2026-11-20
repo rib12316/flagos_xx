@@ -297,10 +297,13 @@ class WorkerFL(WorkerBase):
                     _cc.inductor_compile_config[
                         _key
                     ] = make_rope_cat_pass(vllm_config)
+                from vllm_fl.compilation.passes import rope_cat_fusion as _fa_rc
                 from vllm_fl.compilation.passes.rope_cat_fusion import (
                     _install_backend_sync,
                     _probe as _fa_probe,
                 )
+
+                _fa_rc._FA_PASS_INSTANCE[0] = _cc.inductor_compile_config[_key]
 
                 # 自愈：保证 configure_post_pass 的快照能看到本 pass
                 # （VllmBackend.__init__ 的 deepcopy 可能早于本注入）

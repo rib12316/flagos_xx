@@ -86,6 +86,11 @@ def _probe(msg: str) -> None:
 
 _probe("MODULE_IMPORT rope_cat_fusion")
 
+# 本进程内已构造的 pass 实例（WorkerFL 注入时登记）。
+# configure_post_pass 自愈的兜底来源：即便 compile 用的 config 对象与注入的
+# 不是同一份，也能把同一进程内的实例补进 pass manager。
+_FA_PASS_INSTANCE: list = [None]
+
 
 def _install_backend_sync() -> None:
     """诊断+自愈：保证注入的 pass 在 compile 期真的进 PostGradPassManager。
@@ -121,9 +126,17 @@ def _install_backend_sync() -> None:
                 f"in_live={key in live} "
                 f"live_id={id(live)} snapshot_id={id(self.inductor_config)}"
             )
-            if key == self.pass_key and key not in self.inductor_config and key in live:
-                self.inductor_config[key] = live[key]
-                _probe("CONFIGURE_SELFHEAL copied live pass into snapshot")
+            if key == self.pass_key and key not in self.inductor_config:
+                if key in live:
+                    self.inductor_config[key] = live[key]
+                    _probe("CONFIGURE_SELFHEAL copied live pass into snapshot")
+                elif _FA_PASS_INSTANCE[0] is not None:
+                    # 极端情形：compile 用的 config 对象与 worker 注入的不是
+                    # 同一份（或 live dict 被重建）——回落到模块级注册表。
+                    # 同一 EngineCore 进程内实例共享；跨进程则 _FA_PASS_INSTANCE
+                    # 为 None（此时不会误注入）。
+                    self.inductor_config[key] = _FA_PASS_INSTANCE[0]
+                    _probe("CONFIGURE_SELFHEAL used module registry")
         except Exception:
             import traceback
 
