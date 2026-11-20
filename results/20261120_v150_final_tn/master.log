@@ -1,0 +1,68 @@
+[2026-11-20 21:25:44] ===== STAGE 1: 精度 105 题 =====
+[2026-11-20 21:29:17] serve[acc] ready after 200s
+== serve[acc] audit ==
+[2026-11-20 21:26:18] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_bm_mode] attn_bm_mode: prefill 重标定 BLOCK_M=256/W16/S2/TILE=128 生效（探针 9.4-9.9x vs upstream，5.7-6.0x vs 旧生产；TILE 非 bit-exact；替换绑定 ops.triton_unified_attention）
+[2026-11-20 21:26:18] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（9 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+[2026-11-20 21:26:18] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_td_mode] attn_td_mode: 已强制 unified_attention use_td=True（TD 加载路径，VLLM_FL_ATTN_TD=0 可关闭）
+[2026-11-20 21:26:18] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_tile_mode] attn_tile_mode: prefill TILE_SIZE 32→16（探针 1.10-1.11×，非 bit-exact；VLLM_FL_ATTN_TILE=0 可关闭）
+[2026-11-20 21:26:18] [INFO] [vllm_fl.dispatch.manager] Op 'w8a8_dynamic_per_token_linear' using 'default.flagos_intmm' (kind=flagos, vendor=None)
+(EngineCore pid=409349) [2026-11-20 21:26:43] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_bm_mode] attn_bm_mode: prefill 重标定 BLOCK_M=256/W16/S2/TILE=128 生效（探针 9.4-9.9x vs upstream，5.7-6.0x vs 旧生产；TILE 非 bit-exact；替换绑定 ops.triton_unified_attention）
+(EngineCore pid=409349) [2026-11-20 21:26:43] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（9 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+(EngineCore pid=409349) [2026-11-20 21:26:43] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_td_mode] attn_td_mode: 已强制 unified_attention use_td=True（TD 加载路径，VLLM_FL_ATTN_TD=0 可关闭）
+(EngineCore pid=409349) [2026-11-20 21:26:43] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_tile_mode] attn_tile_mode: prefill TILE_SIZE 32→16（探针 1.10-1.11×，非 bit-exact；VLLM_FL_ATTN_TILE=0 可关闭）
+(EngineCore pid=409349) [2026-11-20 21:26:43] [INFO] [vllm_fl.dispatch.manager] Op 'w8a8_dynamic_per_token_linear' using 'default.flagos_intmm' (kind=flagos, vendor=None)
+(EngineCore pid=409349) [2026-11-20 21:28:51] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: prefill (bs档=gt128 kv=131072) -> num_warps=2 num_stages=1
+(EngineCore pid=409349) [2026-11-20 21:28:56] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: prefill (bs档=le128 kv=131072) -> num_warps=2 num_stages=1
+(EngineCore pid=409349) [2026-11-20 21:28:59] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le64 kv=131072) -> num_warps=1 num_stages=1
+(EngineCore pid=409349) [2026-11-20 21:29:00] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le32 kv=131072) -> num_warps=1 num_stages=1
+(EngineCore pid=409349) [2026-11-20 21:29:01] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le16 kv=131072) -> num_warps=1 num_stages=1
+[2026-11-20 21:29:24] smoke: SMOKE_OK
+[2026-11-20 21:50:36] evalscope rc=0
+│ minicpm │ MATH-500  │ Accuracy ↑ │ Level 3  │   105 │ 96.2%   │
+│ Model   │ Dataset   │ Metric     │ Subset   │   Num │ Score   │
+│ minicpm │ MATH-500  │ Accuracy ↑ │ Level 3  │   105 │ 96.2%   │
+[2026-11-20 21:50:48] ===== STAGE bench k4 =====
+[2026-11-20 21:52:51] serve[bench_k4] ready after 110s
+== serve[bench_k4] audit ==
+[2026-11-20 21:51:22] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_bm_mode] attn_bm_mode: prefill 重标定 BLOCK_M=256/W16/S2/TILE=128 生效（探针 9.4-9.9x vs upstream，5.7-6.0x vs 旧生产；TILE 非 bit-exact；替换绑定 ops.triton_unified_attention）
+[2026-11-20 21:51:22] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（9 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+[2026-11-20 21:51:22] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_td_mode] attn_td_mode: 已强制 unified_attention use_td=True（TD 加载路径，VLLM_FL_ATTN_TD=0 可关闭）
+[2026-11-20 21:51:22] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_tile_mode] attn_tile_mode: prefill TILE_SIZE 32→16（探针 1.10-1.11×，非 bit-exact；VLLM_FL_ATTN_TILE=0 可关闭）
+[2026-11-20 21:51:22] [INFO] [vllm_fl.dispatch.manager] Op 'w8a8_dynamic_per_token_linear' using 'default.flagos_intmm' (kind=flagos, vendor=None)
+(EngineCore pid=435966) [2026-11-20 21:51:48] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_bm_mode] attn_bm_mode: prefill 重标定 BLOCK_M=256/W16/S2/TILE=128 生效（探针 9.4-9.9x vs upstream，5.7-6.0x vs 旧生产；TILE 非 bit-exact；替换绑定 ops.triton_unified_attention）
+(EngineCore pid=435966) [2026-11-20 21:51:48] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（9 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+(EngineCore pid=435966) [2026-11-20 21:51:48] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_td_mode] attn_td_mode: 已强制 unified_attention use_td=True（TD 加载路径，VLLM_FL_ATTN_TD=0 可关闭）
+(EngineCore pid=435966) [2026-11-20 21:51:48] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_tile_mode] attn_tile_mode: prefill TILE_SIZE 32→16（探针 1.10-1.11×，非 bit-exact；VLLM_FL_ATTN_TILE=0 可关闭）
+(EngineCore pid=435966) [2026-11-20 21:51:48] [INFO] [vllm_fl.dispatch.manager] Op 'w8a8_dynamic_per_token_linear' using 'default.flagos_intmm' (kind=flagos, vendor=None)
+(EngineCore pid=435966) [2026-11-20 21:52:33] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: prefill (bs档=gt128 kv=131072) -> num_warps=2 num_stages=1
+(EngineCore pid=435966) [2026-11-20 21:52:36] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: prefill (bs档=le128 kv=131072) -> num_warps=2 num_stages=1
+(EngineCore pid=435966) [2026-11-20 21:52:38] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le64 kv=131072) -> num_warps=1 num_stages=1
+(EngineCore pid=435966) [2026-11-20 21:52:39] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le16 kv=131072) -> num_warps=1 num_stages=1
+(EngineCore pid=435966) [2026-11-20 21:52:39] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le32 kv=131072) -> num_warps=1 num_stages=1
+[2026-11-20 21:52:58] smoke: SMOKE_OK
+[2026-11-20 22:14:49] bench k4 rc=0；summary:
+Prefill,Decode,Conc,Num Prompts,Benchmark Duration (s),Total Input Tokens,Total Output Tokens,Req/s,Output tok/s,Peak Output tok/s,Total tok/s,Mean TTFT (ms),Median TTFT (ms),P99 TTFT (ms),Mean TPOT (ms),Median TPOT (ms),P99 TPOT (ms),Mean ITL (ms),Median ITL (ms),P99 ITL (ms)
+4096,1024,64,256,284.05,1048576.0,262144.0,0.9,922.87,1489.0,4614.33,3864.99,1627.83,21215.87,65.2,68.35,69.07,65.2,48.85,266.09
+[2026-11-20 22:15:01] ===== STAGE bench k16 =====
+[2026-11-20 22:17:04] serve[bench_k16] ready after 110s
+== serve[bench_k16] audit ==
+[2026-11-20 22:15:35] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_bm_mode] attn_bm_mode: prefill 重标定 BLOCK_M=256/W16/S2/TILE=128 生效（探针 9.4-9.9x vs upstream，5.7-6.0x vs 旧生产；TILE 非 bit-exact；替换绑定 ops.triton_unified_attention）
+[2026-11-20 22:15:35] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（9 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+[2026-11-20 22:15:35] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_td_mode] attn_td_mode: 已强制 unified_attention use_td=True（TD 加载路径，VLLM_FL_ATTN_TD=0 可关闭）
+[2026-11-20 22:15:35] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_tile_mode] attn_tile_mode: prefill TILE_SIZE 32→16（探针 1.10-1.11×，非 bit-exact；VLLM_FL_ATTN_TILE=0 可关闭）
+[2026-11-20 22:15:35] [INFO] [vllm_fl.dispatch.manager] Op 'w8a8_dynamic_per_token_linear' using 'default.flagos_intmm' (kind=flagos, vendor=None)
+(EngineCore pid=463701) [2026-11-20 22:15:59] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_bm_mode] attn_bm_mode: prefill 重标定 BLOCK_M=256/W16/S2/TILE=128 生效（探针 9.4-9.9x vs upstream，5.7-6.0x vs 旧生产；TILE 非 bit-exact；替换绑定 ops.triton_unified_attention）
+(EngineCore pid=463701) [2026-11-20 22:15:59] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] attn_launch_config: 已装载 unified_attention launch 配置表（9 行，路径×bs档×kv档 索引；VLLM_FL_ATTN_LAUNCH=0 可关闭）
+(EngineCore pid=463701) [2026-11-20 22:15:59] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_td_mode] attn_td_mode: 已强制 unified_attention use_td=True（TD 加载路径，VLLM_FL_ATTN_TD=0 可关闭）
+(EngineCore pid=463701) [2026-11-20 22:15:59] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_tile_mode] attn_tile_mode: prefill TILE_SIZE 32→16（探针 1.10-1.11×，非 bit-exact；VLLM_FL_ATTN_TILE=0 可关闭）
+(EngineCore pid=463701) [2026-11-20 22:15:59] [INFO] [vllm_fl.dispatch.manager] Op 'w8a8_dynamic_per_token_linear' using 'default.flagos_intmm' (kind=flagos, vendor=None)
+(EngineCore pid=463701) [2026-11-20 22:16:45] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: prefill (bs档=gt128 kv=131072) -> num_warps=2 num_stages=1
+(EngineCore pid=463701) [2026-11-20 22:16:48] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: prefill (bs档=le128 kv=131072) -> num_warps=2 num_stages=1
+(EngineCore pid=463701) [2026-11-20 22:16:50] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le64 kv=131072) -> num_warps=1 num_stages=1
+(EngineCore pid=463701) [2026-11-20 22:16:51] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le16 kv=131072) -> num_warps=1 num_stages=1
+(EngineCore pid=463701) [2026-11-20 22:16:51] [INFO] [vllm_fl.dispatch.backends.vendor.iluvatar.attn_launch_config] fl.attn-launch: decode (bs档=le32 kv=131072) -> num_warps=1 num_stages=1
+[2026-11-20 22:17:10] smoke: SMOKE_OK
+[2026-11-20 23:06:51] bench k16 rc=0；summary:
+Prefill,Decode,Conc,Num Prompts,Benchmark Duration (s),Total Input Tokens,Total Output Tokens,Req/s,Output tok/s,Peak Output tok/s,Total tok/s,Mean TTFT (ms),Median TTFT (ms),P99 TTFT (ms),Mean TPOT (ms),Median TPOT (ms),P99 TPOT (ms),Mean ITL (ms),Median ITL (ms),P99 ITL (ms)
+16384,1024,64,128,683.71,2097152.0,131072.0,0.19,191.7,462.0,3259.02,151037.21,180437.38,261757.99,152.35,167.31,170.15,152.35,78.41,617.43
+[2026-11-20 23:07:03] ALL_DONE

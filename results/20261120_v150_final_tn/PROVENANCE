@@ -1,0 +1,5 @@
+== PROVENANCE 2026-11-20 21:25:43 ==
+tree: afa5fdada6ca721bcfb34a31ef124af8809ab2af (final-submition merge)
+env VLLM*: 1 vars (expect 1: VLLM_PLUGINS)
+Version: 0.0.0
+Location: /usr/local/lib/python3.12/site-packages
