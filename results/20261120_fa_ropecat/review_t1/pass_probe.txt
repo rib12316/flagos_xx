@@ -1,0 +1,9 @@
+[15:30:23 pid=397020] INIT pass_id=140624760153456 icc_id=140624866412608 key_present=False
+[15:30:24 pid=397020] REGISTER neox=True head_outputs=True total=2
+[15:30:24 pid=397020] WORKER_INJECT icc_id=140624866412608 pass_id=140624760153456
+[15:30:43 pid=397020] CALL pass_id=140624760153456 nodes=56 cat=2 view_reshape=4 index=1
+[15:30:44 pid=397020] CALL_DONE matched=1
+[15:30:45 pid=397020] CALL pass_id=140624760153456 nodes=95 cat=2 view_reshape=5 index=1
+[15:30:45 pid=397020] CALL_DONE matched=1
+[15:31:10 pid=397020] CALL pass_id=140624760153456 nodes=46 cat=0 view_reshape=1 index=0
+[15:31:10 pid=397020] CALL_DONE matched=0

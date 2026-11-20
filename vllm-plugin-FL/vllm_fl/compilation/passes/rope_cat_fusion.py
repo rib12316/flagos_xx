@@ -9,9 +9,8 @@ mla_rope_kvcache_cat_fusion.py（direct_register_custom_op + VllmPatternReplacem
 ----------------------------------------------------------------------------
 compile 模式下 vllm CustomOp 默认解绑（forward_native），serve 图中 rope 即
 RotaryEmbedding.forward_static 的 aten 分解（index_select → chunk → mul/sub/add
-→ cat → cat）。本 pass 的 pattern 侧用 MatcherRotaryEmbedding(enabled=False)
-追踪**同一段 python**（forward_native 路径），fx 结构天然与真实图一致——上游
-配方成立的同一理由。图内无独立 cat 算子待融合（cat 是 rope 分解的内件，已被
+→ cat）。pattern 追踪 ApplyRotaryEmb.forward_static 的 NeoX 分支和保留 head 维的
+Q/K 输出。图内无独立 cat 算子待融合（cat 是 rope 分解的内件，已被
 inductor 并入 cat_3/cat_4 两核）；本 pass 做的是把两核换成一个 opaque 融合 op。
 
 替换语义
@@ -26,7 +25,7 @@ inductor 并入 cat_3/cat_4 两核）；本 pass 做的是把两核换成一个 
 其它 qkv 消费者不在匹配域内、原样保留。op 无 mutation → 不需要
 auto_functionalized（上游用它只因 fused op 原地写）。
 
-接线（platform.py 注入点，装载期静态）
+接线（WorkerFL 构造期注入）
 ----------------------------------------------------------------------------
 compilation_config.inductor_compile_config["post_grad_custom_post_pass"] =
 <本 pass 实例>（backends.py configure_post_pass 会把它 add 进 PostGradPassManager
