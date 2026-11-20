@@ -128,8 +128,7 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
 
 - 产物：`/data/delivery_final/infragogogo.zip`（24 MB；解包根目录 `infragogogo/`）；
   报告构建目录另打包 `build.zip`（report.md/图表/构建脚本）。
-- 结构：`FlagGems/`（v5.3.5 原样，内容级核对 0 差异）、`vllm-plugin-FL/`（= 本分支
-  afa5fda 全量源码，432 文件逐一哈希一致）、`scripts/`（量化/复跑/探针工具）、
+- 结构：`FlagGems/`（v5.3.5 原样，内容级核对 0 差异）、`vllm-plugin-FL/`（= 本分支全量源码，425 文件与 git 树逐字节一致）、`scripts/`（量化/复跑/探针工具）、
   `evidence/`（双卡终版官方 CSV、105 题判分、基线 raw、融合 A/B、act_stats）、
   `readme.md`（复现说明）、`report.pdf`（17 页技术报告）。
 - 内容口径（2026-11-21 重构）：报告与 readme 只呈现**最终方案与最终结果**，每项改进
@@ -137,8 +136,8 @@ serve 参数除文档注明的 `--model` 外一字不动；benchmark 脚本原�
   （含附录“内部代号→编号”映射表），evidence 同步剔除旧版本文件。
 - 代码标识符（模块名/env 名/日志 tag）保持与产出这些数字的验证树逐字节一致，未做
   纯命名性改动——复现优先，避免引入未验证差异。
-- 校验：pip 从包内安装成功；`vllm_fl` 全树 py_compile 通过；插件树与仓库哈希一致；
-  report.pdf 文本可检索（数字/模型名抽取正确）；TOC 页码全部可定位。
+- 校验：从 zip 全新解包后 pip 安装成功（无 .git 环境下 setuptools-scm 回退 0.0.0 并生成 `_version.py`）；`vllm_fl` 全树 py_compile 通过；插件/FlagGems 树与 git archive 逐字节一致（425/4780 文件）；官方 bench 脚本自基线零改动；report.pdf 文本可检索、TOC 页码全部可定位。
+- 包根新增 `PROVENANCE.txt`：源码仓库/分支/提交、基线锚点与完整性自检命令。
 - ⚠ 环境事件：23:15 起宿主侧回收全部 4 张 C500（`mx-smi -L` 四卡
   `Not Available(MetaX Sysfs File Unaccessible)`，`torch.cuda.is_available()=False`），
   非本机操作所致（20:50 官方复测后 GPU 未再使用）。今日数字已落盘不受影响；
